@@ -31,10 +31,12 @@ for (i in QEAfore$StockCode) {
 FF <- TRDFFNF
 exwind <- -270L
 bhwind <- -31L
+exdate <- -20
+bhdate <- +40
 stksam <- data.frame()
 stkwnk <- data.frame()
 stkbrk <- data.frame()
-for (i in 1:length(ReptInfo)) {
+for (i in 1:nrow(ReptInfo)) {
   QEAgrp <- data.frame()
   stkts <- filter(FF, Stkcd == ReptInfo[i,'Stkcd'])
   stkts <- filter(stkts, TradingDate %within%
@@ -42,12 +44,13 @@ for (i in 1:length(ReptInfo)) {
                              ReptInfo[i,'Annodt'] %m+% months(4)))
   if (ReptInfo[i,'Annodt'] %in% WorkingDay) {
     n.row <- which(WorkingDay==ReptInfo[i,'Annodt'])
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
+                             (n.row + exdate):(n.row + bhdate))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind+1,
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
            stksam <- rbind(stksam, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else if (wday(ReptInfo[i,'Annodt']) == 7) { 
@@ -55,12 +58,13 @@ for (i in 1:length(ReptInfo)) {
     ifelse(QEADate %in% WorkingDay, 
            n.row <- which(WorkingDay==QEADate), 
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
+                             (n.row + exdate):(n.row + bhdate))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind+1,
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
            stkwnk <- rbind(stkwnk, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else if (wday(ReptInfo[i,'Annodt']) == 1) {
@@ -68,12 +72,13 @@ for (i in 1:length(ReptInfo)) {
     ifelse(QEADate %in% WorkingDay, 
            n.row <- which(WorkingDay==QEADate), 
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
+                             (n.row + exwind):(n.row + bhwind))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate  %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind+1,
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
            stkwnk <- rbind(stkwnk, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else stkbrk <- rbind(stkbrk, ReptInfo[i,])
@@ -87,10 +92,9 @@ stknor <- stknor[,-ncol(stknor)]
 ## check up the time periods(no matching errors)
 TSN <- c()
 TSA <- c()
-stkpan <- data.frame()
 for (i in unique(stknor[,1])) {
   TS <- nrow(filter(stknor, Stkcd==i))
-  if (TS!=bhwind - exwind +1){
+  if (TS!=bhwind-exwind +1 + bhdate-exdate +1){
   TSA <- c(TSA, i)
   stknor <- filter(stknor, Stkcd!=i)
   } else {TSN <- c(TSN,i)}
