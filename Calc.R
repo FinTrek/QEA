@@ -1,171 +1,184 @@
-
+###############################################
+######### Read the result from MATLAB #########
+###############################################
 library(R.matlab)
-path <- ("~/NutSync/EQA/Data/Matlab_PLS")
-
-# Group result from matlab
-PLSgrp <- readMat(file.path(path, "group.mat"))
-PLSgrp <- data.frame(matrix(unlist(PLSgrp), nrow=1172, byrow=T),stringsAsFactors=FALSE)
-colnames(PLSgrp) <- c("group")
-# grouped stock code
-subsamA <- TSN[group[,1]==1]
-subsamB <- TSN[group[,1]==2]
-subsamC <- TSN[group[,1]==3]
-subsam.N <- c()
+path <- ("~/NutSync/QEA/Data/Matlab_PLS")
 
 # PLS coefficients
-coefgrp <- readMat(file.path(path, "est_PLS.mat"))
-coefgrp <- as.data.frame(coefgrp[[1]])
-colnames(coefgrp) <- c('g1_coef', 'g1_sd', 'g1_t', 'g2_coef', 'g2_sd', 'g2_t', 
-                      'g3_coef', 'g3_sd', 'g3_t')
-write.csv(coefgrp, file = "PLScoef.csv", row.names = F)
-#######################
+PLScoef <- readMat(file.path(path, "est_PLS.mat"))
+PLScoef <- as.data.frame(PLScoef[[1]])
+PLScolnam <- c()
+for (i in 1:grpnum) {
+  colnam <- paste0('g', i, '_', c('coef', 'sd', 't'))
+  PLScolnam <- c(PLScolnam ,colnam)
+}
+rm(colnam); colnames(PLScoef) <- PLScolnam
 
+# Group information
+PLSgrp <- readMat(file.path(path, "group.mat"))
+PLSgrp <- data.frame(matrix(unlist(PLSgrp), nrow=length(TSN), byrow=T),
+                     stringsAsFactors=FALSE)
+colnames(PLSgrp) <- c("group")
+grpnum <- length(unique(PLSgrp$group))
+# grouped stock code
+PLSclus <- data.frame()
+samnum <- c()
+for (i in 1:grpnum) {
+  sam <- TSN[PLSgrp$group==i]
+  samn <- length(sam)
+  sam <- cbind(sam,c(i))
+  PLSclus <- rbind(PLSclus, sam)
+  samnum <- c(samnum,samn)
+}
+PLSgrp <- PLSclus; rm(sam,samn,PLSclus)
+colnames(PLSgrp) <- c('Stkcd', 'group')
+PLSgrp$Stkcd <- as.character(PLSgrp$Stkcd)
+
+
+##########################################################
+#### Assure the OLS result in R is same with matlab's ####
+##########################################################
+charff3 <- c('Stkcd', 'Dretwd', 'RiskPrem', 'Thr_SMB', 'Thr_HML')
+charff5 <- c('Stkcd', 'Dretwd', 'RiskPrem', 'Five_SMB', 'Five_HML', 
+  'Five_RMW', 'Five_CMA')
+# demean by function scale
+# one by one
+ifelse(nrow(PLScoef==3),
+       stkdem <- subset(stkdat, select=charff3),
+       stkdem <- subset(stkdat, select=charff5))
+stkdem <- scale(subset(stkdem,select=-Stkcd),center=T,scale=F)
+# personal function for getting the demeaned OLS estimator
+stkcoef <- function(x) {
+  g <- data.frame()
+  for(i in unique(x$Stkcd)) {
+    q <- filter(x, Stkcd==i)[,-1]
+    stkreg <- lm(Dretwd ~ ., data = q) 
+    stkregcoef <- t(as.data.frame(coef(stkreg)))
+    k <- cbind(i, stkregcoef)
+    g <- rbind(g,k)
+  }
+  return(as.data.frame(g))
+}
+OLScoef <- stkcoef(stkdem) 
 
 
 #####################################################################
 ########### the statistical properties of QEA daily data ############
 #####################################################################
 
+# estimate coefficients one by one
+stkff3 <- subset(stkdat, select=charff3)
+stkff5 <- subset(stkdat, select=charff5)
+
+stkff <- stkff3 # Very Important!
+
 # the correlation coefficient between explanation variables
-cor(stknor[(1:T)+T*sample(1:length(unique(stknor[,ecode])), size = 1), c(4,7:10)])
-
-######################### demean ##################
-ecode <- c(1L)
-edate <- c(2L)
-demean <- function(x) {
-  f <- data.frame()
-  j <- data.frame()
-  for (i in unique(x[,ecode])) {
-    w <- filter(x, x[,ecode]==i)
-    z <- colMeans(w[, - c(ecode, edate, ncol(x))])
-    for (l in 1:length(z)) { w[,l+2] <- w[,l+2] - z[l] }
-    j <- rbind(j, w)
-  }
-  return(j)
-}
-
-stkdm <- demean(stknor)
-
-
-## estimate coefficients one by one
-stkest <- stknor # for stkdm, acquire the result is same with matlab
-stkff3 <- select(stkest, c('Stkcd', 'Dretwd', 'RiskPrem', 'Thr_SMB', 'Thr_HML'))
-
-stkff5 <- select(stkest, c('Stkcd', 'Dretwd', 'RiskPrem', 
-                           'Five_SMB', 'Five_HML', 'Five_RMW', 'Five_CMA'))
-
-stkcoef <- function(x) {
-  y <- unique(x[,ecode])
-  g <- data.frame()
-  for(i in 1:length(y)) {
-    z <- y[i]
-    q <- filter(x, x[,ecode]==z)[,-1]
-    storeg <- lm(Dretwd ~ ., data = q) 
-    storegcoef <- t(as.data.frame(coef(storeg)))
-    k <- cbind(z, storegcoef)
-    g <- rbind(g,k)
-  }
-  return(g)
-}
-
-samcoef <- as.data.frame(stkcoef(stkff3))
+rownum <- estwndlen * sample(1:length(unique(stkdat$Stkcd)), size = 1)
+cor(subset(stkff[c(1:estwndlen)+rownum,], select = -c(Stkcd, Dretwd)))
+# Original OLS estimator within estimation window 
+samcoef <- stkcoef(stkff) 
 # solve the problem of data type (factor to numeric)
-colnames(samcoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML")
-# as for FF-5
-colnames(samcoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML", "RMW", "CMA")
-nece <- paste0('coef-',QEAper, '.csv')
-write.csv(samcoef, file=nece, quote=F, row.names = F)
-samcoef <- as.data.frame(read_delim(nece, delim=',', na = ''))
-samcoef[,3:ncol(samcoef)] <- round(samcoef[,3:ncol(samcoef)],6)
+ifelse (ncol(samcoef)==5, # 5= 2(Stkcd+alpha) + 3 factors 
+        colnames(samcoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML"),
+        colnames(samcoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML", "RMW", "CMA"))
+necoef <- paste0('~/R/Data/', QEAperd, '-coef', '.csv')
+write.csv(samcoef, file=necoef, quote=F, row.names = F)
+samcoef <- as.data.frame(read_delim(necoef, delim=',', na = ''))
+samcoef[, 3:ncol(samcoef)] <- round(samcoef[, 3:ncol(samcoef)], 6)
 
 
-#####################################################################
-########### the plot of estimation results ############
-#####################################################################
+# plot of estimation results
 library(ggplot2)
 require(grid)
 library(latex2exp)
-a <- qplot(samcoef[,3], xlab=TeX('$\\beta_1$ of MKT'), ylab = "count",bins=50)
-b <- qplot(samcoef[,4], xlab=TeX('$\\beta_2$ of SMB'), ylab = "count",bins=50)
-c <- qplot(samcoef[,5], xlab=TeX('$\\beta_3$ of HML'), ylab = "count",bins=50)
 
 grid.newpage()
-pushViewport(viewport(layout = grid.layout(1,3)))
 vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)}
-print(a, vp = vplayout(1,1))
-print(b, vp = vplayout(1,2))       
-print(c, vp = vplayout(1,3)) 
+ifelse(ncol(samcoef)==5,
+{ pushViewport(viewport(layout = grid.layout(2,2)))
+  print(qplot(samcoef$MKT, xlab=TeX('$\\beta_1$ of MKT'), ylab = "Count",bins=100), 
+      vp = vplayout(1,1:2))
+  print(qplot(samcoef$SMB, xlab=TeX('$\\beta_2$ of SMB'), ylab = "Count",bins=30), 
+      vp = vplayout(2,1))       
+  print(qplot(samcoef$HML, xlab=TeX('$\\beta_3$ of HML'), ylab = "Count",bins=30), 
+      vp = vplayout(2,2))},
+{ pushViewport(viewport(layout = grid.layout(2,4)))
+  print(qplot(samcoef$MKT, xlab=TeX('$\\beta_1$ of MKT'), ylab = "Count",bins=100), 
+        vp = vplayout(1,1:4))
+  print(qplot(samcoef$SMB, xlab=TeX('$\\beta_2$ of SMB'), ylab = "Count",bins=30), 
+        vp = vplayout(2,1))       
+  print(qplot(samcoef$HML, xlab=TeX('$\\beta_3$ of HML'), ylab = "Count",bins=30), 
+        vp = vplayout(2,2))
+  print(qplot(samcoef$RMW, xlab=TeX('$\\beta_4$ of RMW'), ylab = "Count",bins=30), 
+        vp = vplayout(2,3))
+  print(qplot(samcoef$CMA, xlab=TeX('$\\beta_5$ of CMA'), ylab = "Count",bins=30), 
+        vp = vplayout(2,4))}
+)
 
-###################################################
+
+##################################################
 ############### Calculate AR & CAR ###############
-#################################################
-
-#expected value
-QEAES <- function(x, y) {
-  p <- c()
-  for (i in 1:nrow(x)) {
-    code <- x[i, ecode]
-    z <- filter(y, y[,ecode]==code)
-    w <- as.matrix(z[, colnum]) %*% diag(x[i, colnum])
-    q <- rowSums(w) + x[i, 2]
-    p <- c(p ,q)
-  }
-  return(p)
-}
-
-
-CAR <- function(x) {
-  q <- list(length=ET)
-  p <- c()
-  z <- c()
-  for(i in 1:ET) { q[[i]] <- x[seq(i,ET*N.sam,by=ET)] }
-  for(i in 1:ET) { p <- c(p, mean(q[[i]])) }
-  q[[ET+1]] <- p
-  z[1] <- q[[ET+1]][1]
-  for (i in 1:ET) { z <- c(z, z[i] + q[[ET+1]][i+1]) }
-  q[[ET+1+1]] <- z
-  return(q)
-}
-
-
-colnum <- c(3,4,5)
-ET <- 61L
-exdate <- 1
-bhdate <- 240
-
-
-for (z in c(1,2,3)) {
-  subsam <- TSN[group[,1]==z]
-  
-  stknorab <- data.frame()
+##################################################
+timeline <- c(-20:+40)
+evewndlen <- length(timeline)
+stkeve <- datwind(2) # event window, key
+ifelse(ncol(samcoef)-2==3,
+       {estcol <- c("MKT", "SMB", "HML")
+       evecol <- c("RiskPrem", "Thr_SMB", "Thr_HML")},
+       {estcol <- c("MKT", "SMB", "HML", "RMW", "CMA")
+       evecol <- c("RiskPrem", "Five_SMB", "Five_HML", "Five_RMW", "Five_CMA")})
+QEAabr <- data.frame('tau' = timeline)
+for (z in 1:grpnum) {
+  subsam <- filter(PLSgrp, group==z)$Stkcd
+  stkabr <- c('tau' = timeline)
   for (i in subsam) {
-    QEAsam <- filter(stknor[c(exdate:bhdate),], Stkcd==i)
-    stknorab <- rbind(stknorab, QEAsam)
+    evedat <- filter(stkeve, Stkcd==i)
+    w <- as.matrix(evedat[, evecol]) %*% diag(samcoef[samcoef$Stkcd==i, estcol])
+    stkfit <- rowSums(w) + samcoef[samcoef$Stkcd==i, 'alpha']
+    AbRet <- c(subset(estdat, Dretwd) - stkfit)
+    stkabr <- cbind(stkabr, AbRet)
   }
-  
-  stkfit <- QEAES(samcoef, stknorab)
-  abRet <- stknorab[, 2] - stkfit
-  
-  stkcar <- CAR(abRet)
-  QEAcar <- as.data.frame(stkcar[[ET+1+1]][1:ET])
-  
-  QEAcargrp <- rbind(QEAcargrp, QEAcar)
+  colnames(stkabr) <- c('tau',subsam)
+  QEAabr <- cbind(QEAabr, stkabr)
 }
+QEAabr <- as.data.frame(QEAabr)[,-c(1)] # Abnorl returns
+rm(subsam, evedat, w, stkfit, AbRet, stkabr)
 
-QEAcargrp$group <- as.factor(c(rep(1:3,each=61)))
-QEAcargrp <- cbind(time=rep(-30:+30,3), QEAcargrp)
+QEAcar <- as.data.frame(matrix(c(length(evewndlen*grpnum)),evewndlen,grpnum))
+for (i in 1:grpnum) {
+  ifelse(i==1,
+         QEAabrmen <- rowMeans(QEAabr[,1+c(1:samnum[i])]),
+         QEAabrmen <- rowMeans(QEAabr[,sum(samnum[1:i-1])+(i-1) + 
+                                        1+c(1:samnum[i])]))
+  for (t in 1:evewndlen) {
+    ifelse(t==1,
+           QEAcar[t,i] <- QEAabrmen[t],
+           QEAcar[t,i] <- sum(QEAabrmen[1:t])) 
+  }
+}
+colnames(QEAcar) <- c(paste0('g',1:grpnum,'_PLS'))
 
-#####
-write.csv(CAR.g, file = "CAR.g.csv", row.names = F)
-#####
 
-# plot
-ggplot(CAR.g[CAR.g[,2]==1,], aes(x=seq(-20,+20), y=CAR)) + geom_line()
-ggplot(CAR.g, aes(time, CAR, colour = group)) + geom_path() 
+###########################################
+############# Path of CAR  ################
+###########################################
+ggcar <- data.frame(matrix(0,evewndlen*grpnum,3))
+for (i in 1:grpnum) {
+  ifelse(i==1, ggcar[(1:evewndlen),] <- cbind(timeline,QEAcar[,i],c(i)),
+  ggcar[(i-1)*evewndlen + (1:evewndlen), ] <- cbind(timeline,QEAcar[,i],c(i)))
+}
+colnames(ggcar) <- c('timeline','CAR', 'group')
+ggcar$group <- as.factor(ggcar$group)
+ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
+  labs(title = titchar, x="Time line", colour="PLS") + 
+  theme(plot.title = element_text(size=15), 
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  scale_colour_discrete(labels=expression(beta[1] == PLScoef[1,1], beta[1] == PLScoef[1,4]))
 
 
-timeline <- seq(-30,+30)
-ggplot() + geom_line(aes(x=timeline, y=CAR), CAR.g[CAR.g[,2]==1,], color="red") +  
-  geom_line(aes(x=timeline, y=CAR), CAR.g[CAR.g[,2]==2,], color="blue") +
-  geom_line(aes(x=timeline, y=CAR), CAR.g[CAR.g[,2]==3,], color="black") + 
-  xlab("Time line")
+###################### Output #######################
+necar <- paste0('~/R/Data/', QEAperd, 'CAR','.RData')
+write.csv(QEAcar, file=necar, quote=F, row.names = F)
+write.csv(round(PLScoef,4), file = "~/R/Data/PLSrelt.csv", 
+          row.names = F)

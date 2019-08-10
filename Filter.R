@@ -1,70 +1,35 @@
-library(timeDate)
-
-##################
-QEAper <- timeDate('2017-09-30')
-ReptInfo <-  filter(ReptInfo, Accper %in% QEAper)
-
-########### Find Working day ###############
-FF3 <- as.data.frame(read_delim('STK_MKT_ThrfacDay.txt', delim='\t', na = ''))
-# Weighted in Total Market Value 
-FF3$TradingDate <- as.Date(FF3$TradingDate,'%Y-%m-%d')
-FF3 <- FF3[FF3$MarkettypeID=='P9709',c(2,4,6,8)]
-FF3 <- arrange(FF3, TradingDate)
-colnames(FF3) <- c('TradingDate','RiskPremium','Thr_SMB','Thr_HML')
-WorkingDay <- FF3[-c(1:4719), 'TradingDate']
-
-########abandon the stocks that have published ex-earnings report###########
-QEAfore <- as.data.frame(read_delim('fore.csv', delim=',', na = ''))
-# Weighted in Total Market Value 
-QEAfore$StockCode <- str_sub(as.character(QEAfore$StockCode), 
-                             start = 1L, end = 6L)
-TRDFFNF <- TRDFF
-for (i in QEAfore$StockCode) {
-  TRDFFNF <- filter(TRDFFNF, Stkcd!=i)
-}
-
-
-
-
-############## Tidy ###############
-
-FF <- TRDFFNF
+###################################################
+##################### Matching ####################
+##################################################
 exwind <- -270L
-bhwind <- -31L
-exdate <- -20
-bhdate <- +40
-stksam <- data.frame()
+bhwind <- +40L
+stkwek <- data.frame()
 stkwnk <- data.frame()
 stkbrk <- data.frame()
 for (i in 1:nrow(ReptInfo)) {
   QEAgrp <- data.frame()
-  stkts <- filter(FF, Stkcd == ReptInfo[i,'Stkcd'])
-  stkts <- filter(stkts, TradingDate %within%
-                    interval(ReptInfo[i,'Annodt'] %m+% months(-14),
-                             ReptInfo[i,'Annodt'] %m+% months(4)))
+  stkts <- filter(TRDSAM, Stkcd == ReptInfo[i,'Stkcd'])
   if (ReptInfo[i,'Annodt'] %in% WorkingDay) {
     n.row <- which(WorkingDay==ReptInfo[i,'Annodt'])
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
-                             (n.row + exdate):(n.row + bhdate))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
-           stksam <- rbind(stksam, QEAgrp),
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1,
+           stkwek <- rbind(stkwek, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else if (wday(ReptInfo[i,'Annodt']) == 7) { 
     QEADate <- ReptInfo[i,'Annodt'] + days(2)
     ifelse(QEADate %in% WorkingDay, 
            n.row <- which(WorkingDay==QEADate), 
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
-                             (n.row + exdate):(n.row + bhdate))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1,
            stkwnk <- rbind(stkwnk, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else if (wday(ReptInfo[i,'Annodt']) == 1) {
@@ -72,63 +37,115 @@ for (i in 1:nrow(ReptInfo)) {
     ifelse(QEADate %in% WorkingDay, 
            n.row <- which(WorkingDay==QEADate), 
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
-    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind),
-                             (n.row + exwind):(n.row + bhwind))]
+    QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
     for (i in 1:length(QEA.date)) {
       QEAsim <- filter(stkts, TradingDate  %in% QEA.date[i])
       QEAgrp <- rbind(QEAgrp, QEAsim)
     }
-    ifelse(nrow(QEAgrp) == bhwind-exwind +1 + bhdate-exdate +1,
+    ifelse(nrow(QEAgrp) == bhwind-exwind +1,
            stkwnk <- rbind(stkwnk, QEAgrp),
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else stkbrk <- rbind(stkbrk, ReptInfo[i,])
 }
+rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date)
+stktol <- rbind(stkwek, stkwnk)
 
-stktol <- rbind(stksam,stkwnk)
-# Trading status, one meanings normal
-stkabt <- filter(stktol, Trdsta!=1)
-stknor <- filter(stktol, Trdsta==1)
-stknor <- stknor[,-ncol(stknor)]
-## check up the time periods(no matching errors)
+
+#################### Trdsta [交易状态] ########################
+##### 1=正常交易，2=ST，3＝*ST，                           ####
+##### 4＝S（2006年10月9日及之后股改未完成），              ####
+##### 5＝SST，6＝S*ST，                                    ####
+##### 7=G（2006年10月9日之前已完成股改），8=GST，9=G*ST，  ####
+##### 10=U（2006年10月9日之前股改未完成），                ####
+##### 11=UST，12=U*ST，13=N，14=NST，15=N*ST，16=PT        ####
+###############################################################
+
+######################## Important ############################
+### week day(stkwek), weekend day(stkwnk)，or all of them(stktol)？
+stktrd <- stktol # key
+
+Trdstatype <- c(1) # key, Trading status
+stktrd <- filter(stktrd, Trdsta %in% Trdstatype)[,-ncol(stktrd)]
+## check up the time periods not existed errors
 TSN <- c()
 TSA <- c()
-for (i in unique(stknor[,1])) {
-  TS <- nrow(filter(stknor, Stkcd==i))
-  if (TS!=bhwind-exwind +1 + bhdate-exdate +1){
-  TSA <- c(TSA, i)
-  stknor <- filter(stknor, Stkcd!=i)
+for (i in unique(stktrd$Stkcd)) {
+  TS <- nrow(filter(stktrd, Stkcd==i))
+  if (TS!=bhwind-exwind +1){
+    TSA <- c(TSA, i)
+    stktrd <- filter(stktrd, Stkcd!=i)
   } else {TSN <- c(TSN,i)}
 }
 
-colnames(stknor)[4] <- 'RiskPrem'
-# Shanghai
-stksamSH <- filter(stknor, Markettype==1)
-# Shenzheng
-stksamSZ <- filter(stknor, Markettype==4)
-# 创业板
-stksamTC <- filter(stknor, Markettype==16)
+##########################################
+#### Estimation Window & Event Window ####
+##########################################
+
+datwind <- function(x) {
+  if(x == 1) {
+    exdate <- 1 # Estimation Window
+    bhdate <- 240
+  } else {
+    exdate <- 251 # Event Window
+    bhdate <- 311
+  }
+  stkdat <- data.frame()
+  for (i in unique(stktrd$Stkcd)) {
+    stksim <- filter(stktrd, Stkcd==i)
+    stksim <- stksim[c(exdate:bhdate),]
+    stkdat <- rbind(stkdat, stksim)
+  }
+  return(stkdat)
+  rm(stksim)
+}
+
+stkdat <- datwind(1) # key
+
+###############################################################
+################# Markettype [股票交易市场] ###################
+################ 1=上海A, 4=深圳A, 16=创业板 #### #############
+###############################################################
+mkttype <- c(1,4,16) # key
+stkdat <- filter(stkdat, Markettype %in% mkttype)[,-ncol(stkdat)]
+TSN <- unique(stkdat$Stkcd)
 
 
+####################################
 ############ Output ################
-ne <- paste0('QEA-', QEAper, '.csv')
-necd <- paste0('QEA-stkcd-', QEAper, '.csv')
-nesa <- paste0('QEA-', QEAper, '.RData')
+####################################
+ne <- paste0('~/R/Data/', QEAperd, '-TradStat-FF','.csv')
+necd <- paste0('~/R/Data/', QEAperd, '-stkcd','.csv')
+nesa <- paste0('~/R/Data/', QEAperd, '.RData')
 save.image(nesa)
-write.csv(stknor, file=ne, quote=F, row.names = F)
+write.csv(stkdat, file=ne, quote=F, row.names = F)
 ## the sample stock code 
 write.csv(TSN, file=necd, quote=F, row.names = F)
 
 
-# select random 300 stocks as a sample
-randcd <- sample(unique(stknor$Stkcd), size = 300)
+#########################################################
+########## stock code, day index in MATLAB ##############
+#########################################################
+estwndlen <- 240L
+QEAIndex <- cbind(rep(1:length(TSN), each=estwndlen),
+           rep(seq(from=1, to=estwndlen, by=1), times=length(TSN)))
+colnames(QEAIndex) <- c("Stkcd", "day")
+neid <- paste0('~/R/Data/', QEAperd, '-Index','.csv')
+write.csv(QEAIndex, file=neid, quote = F , row.names = F,)
+
+
+#################################################
+###### select random 300 stocks as a sample #####
+#################################################
+randcd <- sample(unique(stkdat$Stkcd), size = 300)
 randsam <- data.frame()
 for (i in randcd) {
-  randstk <- filter(stknor, Stkcd==i)
+  randstk <- filter(stkdat, Stkcd==i)
   randsam <- rbind(randsam, randstk)
 }
+rm(randstk)
 
-ne300 <- paste0('QEA-300-', QEAper, '.csv')
-necd300 <- paste0('QEA-300-stkcd-', QEAper, '.csv')
+ne300 <- paste0('~/R/Data/', QEAperd, '-TradStat-FF-300','.csv')
+necd300 <- paste0('~/R/Data/', QEAperd, '-stkcd-300','.csv')
 write.csv(randsam, file=ne300, quote=F, row.names = F)
-write.csv(unique(randsam$Stkcd), file=necd300, quote=F, row.names = F)
-########
+write.csv(randcd, file=necd300, quote=F, row.names = F)
+
