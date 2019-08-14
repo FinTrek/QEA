@@ -16,6 +16,12 @@ for (i in filecd) {
 }
 TRD$TradingDate <- as.Date(TRD$TradingDate,"%Y-%m-%d")
 rm(i,filecd,TRDS);str(TRD)
+# R^i minus R^f
+ThrMonRf <- 0.011
+Rf <- (1 + ThrMonRf)^(1/90) - 1
+TRD$Dretwd <- round(TRD$Dretwd-Rf, 6)
+
+
 
 ############### Quarterly earnings report ###############
 ############### 03-31, the first quarter  ###############
@@ -29,16 +35,14 @@ TRD <- filter(TRD, TradingDate %within%
                 interval(QEAperd %m+% months(-16),
                          QEAperd %m+% months(+6)))
 
+
+
 ################ Market type #################
 #######  1=上海A, 2=上海B, 4=深圳A  ##########
 ###### 8=深圳B, 16=创业板, 32=科创板 #########
-mkttype.char <- c(1,4,16) # key
-TRD <- filter(TRD, Markettype %in% mkttype.char)
+mkttype <- c(1,4,16) # key
+TRD <- filter(TRD, Markettype %in% mkttype)
 
-# R^i minus R^f
-ThrMonRf <- 0.011
-Rf <- (1 + ThrMonRf)^(1/90) - 1
-TRD$Dretwd <- round(TRD$Dretwd-Rf, 6)
 
 
 ##### Select the stocks that have published ex-earnings report ####
@@ -49,13 +53,13 @@ TRD$Dretwd <- round(TRD$Dretwd-Rf, 6)
 ## 3,总样本中去除发布业绩预告的企业
 ## 4,总样本中去除发布定期公告的企业
 ## 若全部都要，输入5即可（实质上除上述数字皆可）
-Pretype <- c(3) # key
-
 PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
   paste0(datadir, .) %>%
   read_delim(delim='\t', na = '') %>%
   select(StockCode, Source, PubliDate, AccPeriod) %>%
   filter(AccPeriod==QEAperd)
+
+Pretype <- c(3) # key
 
 if(Pretype %in% c(0,1)) {
   TRDSAM <- data.frame()
@@ -82,6 +86,8 @@ if(Pretype %in% c(0,1)) {
     TRDSAM <- filter(TRDSAM, Stkcd!=i)
   }
 } else {TRDSAM <- TRD}
+rm(TRD,PreRept,Prestk)
+
 
 
 ######## Fama-French three factor #########
@@ -118,6 +124,8 @@ FF5 <- arrange(FF5, TradingDate) %>%
 
 all.equal(FF3$RiskPrem, FF5$RiskPremium)
 
+
+
 #############################################
 ################### Merge ###################
 #############################################
@@ -128,6 +136,8 @@ TRDSAM <- merge(TRDSAM, FF3, by='TradingDate') %>%
            "RiskPrem","Thr_SMB","Thr_HML",
            "Five_SMB","Five_HML","Five_RMW","Five_CMA",
            "Markettype","Trdsta"))
+rm(FF3,FF5)
+
 
 
 ###### announcement date of quarterly financial report ######
@@ -140,6 +150,8 @@ ReptInfo <- dir(datadir, pattern = 'Rept.csv$') %>%
   as.data.frame()
 
 ReptInfo$Annodt <- as.Date(ReptInfo$Annodt,'%Y-%m-%d')
+
+
 
 #############################
 ########## Matching #########
@@ -190,7 +202,9 @@ for (i in 1:nrow(ReptInfo)) {
            stkbrk <- rbind(stkbrk, ReptInfo[i,]))
   } else stkbrk <- rbind(stkbrk, ReptInfo[i,])
 }
-rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date)
+rm(ReptInfo, QEAgrp, QEAsim, stkts, QEADate, QEA.date,n.row)
+
+
 
 
 #################### Trdsta [交易状态] ########################
@@ -201,7 +215,6 @@ rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date)
 ##### 10=U（2006年10月9日之前股改未完成），                ####
 ##### 11=UST，12=U*ST，13=N，14=NST，15=N*ST，16=PT        ####
 ###############################################################
-
 # week-day(stkwek), weekend-day(stkwnd)
 # or all of them(rbind(stkwek, stkwnd))?
 weekterm <- 'wkd'
@@ -223,6 +236,8 @@ for (i in unique(stktrd$Stkcd)) {
     stktrd <- filter(stktrd, Stkcd!=i)
   } else {TSN <- c(TSN,i)}
 }
+
+
 
 ##########################################
 ########## Estimation Window #############
@@ -248,7 +263,9 @@ datwind <- function(x) {
 # for 1, we get the data within estimation window
 # as for else, we get the data within event window
 stkdatl <- datwind(1L)
-stkdat <- stkdatl[[1]]; windlen <- stkdatl[[2]]
+stkdat <- stkdatl[[1]]; windlen <- stkdatl[[2]]; rm(stkdatl)
+
+
 
 ########### Markettype [股票交易市场] ############
 ########## 1=上海A, 4=深圳A, 16=创业板 ###########
@@ -258,113 +275,29 @@ TSN <- unique(stkdat$Stkcd)
 
 
 
-#####################################################################
-##### Obtain the plots of OLS estimator used above QEA-FF data ######
-#####################################################################
-# CAPM, FF 3-factors or FF 5-factors?
-charCAPM <- c('Stkcd', 'Dretwd', 'RiskPrem')
-charFF3 <- c('Stkcd', 'Dretwd', 'RiskPrem', 'Thr_SMB', 'Thr_HML')
-charFF5 <- c('Stkcd', 'Dretwd', 'RiskPrem', 'Five_SMB', 'Five_HML',
-             'Five_RMW', 'Five_CMA')
-
-stkCAPM <- subset(stkdat, select=charCAPM)
-stkFF3 <- subset(stkdat, select=charFF3)
-stkFF5 <- subset(stkdat, select=charFF5)
-
-######### select which Asset pricing model? #########
-stkff <- stkFF5
-
-# the correlation coefficient between explanation variables
-rownum <- windlen * sample(1:length(unique(stkff$Stkcd)), size = 1)
-cor(subset(stkff[c(1:windlen)+rownum,], select = -c(Stkcd, Dretwd))); rm(rownum)
-
-# personal function for getting the OLS estimator one by one
-stkcoef <- function(x) {
-  g <- data.frame()
-  for(i in unique(x$Stkcd)) {
-    q <- filter(x, Stkcd==i)[,-1]
-    stkreg <- lm(Dretwd ~ ., data = q)
-    stkregcoef <- t(as.data.frame(coef(stkreg)))
-    k <- cbind(i, stkregcoef)
-    g <- rbind(g,k)
-  }
-  colnames(g)[1] <- 'Stkcd'
-  return(as.data.frame(g))
-}
-OLScoef <- stkcoef(stkff)
-
-# solve the problem of data type (factor to numeric)
-if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
-  colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML")
-  modeltype <- 'FF3'
-} else if (ncol(OLScoef)==7) {
-  colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML", "RMW", "CMA")
-  modeltype <- 'FF5'
-} else {
-  colnames(OLScoef) <- c("Stkcd", "alpha","MKT")
-  modeltype <- 'CAPM'
-}
-necoef <- paste(QEAperd, Pretype, modeltype, weekterm,'OLScoef', sep='_') %>%
-  paste0(datadir, ., '.csv')
-write.csv(OLScoef, file=necoef, quote=F, row.names = F)
-OLScoef <- as.data.frame(read_delim(necoef, delim=',', na = ''))
-OLScoef[, 3:ncol(OLScoef)] <- round(OLScoef[, 3:ncol(OLScoef)], 6)
-
-pdf(paste(QEAperd, Pretype, modeltype, weekterm, 'OLScoefdist', sep='_') %>%
-      paste0(datadir, ., '.pdf'))
-library(ggplot2)
-require(grid)
-library(latex2exp)
-grid.newpage()
-vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)}
-if(ncol(OLScoef)==5) {
-  {pushViewport(viewport(layout = grid.layout(2,2)))
-    print(qplot(OLScoef$MKT, xlab=TeX('$\\beta_1$ of MKT'),
-                ylab = "Count",bins=100), vp = vplayout(1,1:2))
-    print(qplot(OLScoef$SMB, xlab=TeX('$\\beta_2$ of SMB'),
-                ylab = "Count",bins=50), vp = vplayout(2,1))       
-    print(qplot(OLScoef$HML, xlab=TeX('$\\beta_3$ of HML'),
-                ylab = "Count",bins=50), vp = vplayout(2,2))}
-} else if (ncol(OLScoef)==7) {
-  {pushViewport(viewport(layout = grid.layout(2,4)))
-    print(qplot(OLScoef$MKT, xlab=TeX('$\\beta_1$ of MKT'),
-                ylab = "Count",bins=100), vp = vplayout(1,1:4))
-    print(qplot(OLScoef$SMB, xlab=TeX('$\\beta_2$ of SMB'),
-                ylab = "Count",bins=50), vp = vplayout(2,1))       
-    print(qplot(OLScoef$HML, xlab=TeX('$\\beta_3$ of HML'),
-                ylab = "Count",bins=50), vp = vplayout(2,2))
-    print(qplot(OLScoef$RMW, xlab=TeX('$\\beta_4$ of RMW'),
-                ylab = "Count",bins=50), vp = vplayout(2,3))
-    print(qplot(OLScoef$CMA, xlab=TeX('$\\beta_5$ of CMA'),
-                ylab = "Count",bins=50), vp = vplayout(2,4))}
-} else {
-  pushViewport(viewport(layout = grid.layout(1,1)))
-  print(qplot(OLScoef$MKT, xlab=TeX('$\\beta_1$ of MKT'),
-              ylab = "Count",bins=100), vp = vplayout(1,1))
-}
-dev.off()
-
 ########################################
 ####### Output the Tidyr result ########
 ########################################
 ## Estimation data
 paste(QEAperd, Pretype, modeltype, weekterm, 'TradStat', sep='_') %>%
   paste0(datadir, ., '.csv') %>%
-    write.csv(stkdat, file=., quote=F, row.names = F)
+  write.csv(stkdat, file=., quote=F, row.names = F)
 ## the sample stock code
 paste(QEAperd, Pretype, modeltype, weekterm,'stkcd', sep='_') %>%
   paste0(datadir, ., '.csv') %>%
-    write.csv(TSN, file=., quote=F, row.names = F)
+  write.csv(TSN, file=., quote=F, row.names = F)
 ## save the image
-paste(QEAperd, Pretype, modeltype, weekterm, sep='_') %>%
-  paste0(datadir, ., '.RData') %>%
-    save.image()
+cdimage <- paste(QEAperd, Pretype, modeltype, weekterm, sep='_') %>%
+  paste0(datadir, ., '.RData') 
+save.image(cdimage)
+
 ###### stock code, day index in MATLAB ########
 MATIndex <- cbind("Stkcd"=rep(1:length(TSN), each=windlen),
                   "day"=rep(seq(from=1, to=windlen, by=1), times=length(TSN))) 
 paste(QEAperd, Pretype, modeltype, weekterm,'MATdex', sep='_') %>%
-    paste0(datadir, ., '.csv') %>%
-    write.csv(MATIndex, file=., quote=F, row.names = F)
+  paste0(datadir, ., '.csv') %>%
+  write.csv(MATIndex, file=., quote=F, row.names = F)
+
 
 #################################################
 ###### select random 300 stocks as a sample #####
