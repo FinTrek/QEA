@@ -128,7 +128,7 @@ PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
 ## 3,总样本中去除发布业绩预告的企业
 ## 4,总样本中去除发布定期公告的企业
 ## 若全部都要，输入5即可（实质上除上述数字皆可）
-Pretype <- c(3,5)
+Pretype <- c(0,1)
 
 
 

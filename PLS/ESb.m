@@ -1,12 +1,12 @@
 %% PLS estimation
 K = 2;
-lam = 0.3336 *var(y) * T^(-1/3);
+lam = 0.2000 *var(y) * T^(-1/3);
 
 [b_K, a] = PLS_est(N, T, y, X, beta_hat0, K, lam, R, tol);
 [~, b, ~ , group] = report_b( b_K, a, K );
 
 %% post estimation
-num = K*3
+num = K*3;
 est_lasso = zeros(p, num);
 est_post_lasso = zeros(p, num);
 
@@ -27,12 +27,12 @@ disp(est_post_lasso)
 
 stkcd(group(:,1))
 stkcd(group(:,2))
-% stkcd(group(:,3))
+%stkcd(group(:,3))
 
 g_PLS = zeros(length(stkcd),1);
 g_PLS( group(:,1) == 1 ) = 1;
 g_PLS( group(:,2) == 1 ) = 2;
-% g_PLS( group(:,3) == 1 ) = 3;
+%g_PLS( group(:,3) == 1 ) = 3;
 
 %% common FE
 

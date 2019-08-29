@@ -33,10 +33,11 @@ stkeve <- paste('^', Accprd, '.', Pretype, '.', weekterm,
 
 ## Read the result from MATLAB ==================================================
 library(R.matlab)
-PLSpath <- ("~/NutSync/QEA/Code/Matlab_PLS")
+PLSpath <- "~/NutSync/QEA/Matlab_PLS"
 
 # Group information
-PLSclus <- readMat(file.path(PLSpath, "group.mat")) %>% `[[`(1) 
+PLSclus <- readMat(file.path(PLSpath, 
+                             paste('group','-', Pretype, '-',Accprd,'.mat', sep = ''))) %>% `[[`(1) 
 colnames(PLSclus) <- c("group")
 grpnum <- length(unique(PLSclus))
 # grouped stock code
@@ -55,7 +56,8 @@ PLSgrp$Stkcd <- as.character(PLSgrp$Stkcd)
 
 
 # PLS coefficients
-PLScoef <- readMat(file.path(PLSpath, "est_PLS.mat")) %>% `[[`(1)
+PLScoef <- readMat(file.path(PLSpath, 
+                             paste('est_PLS','-',Pretype, '-',Accprd,'.mat', sep = ''))) %>% `[[`(1)
 PLScolnam <- c()
 for (i in 1:grpnum) {
     colnam <- paste0('g', i, '_', c('coef', 'sd', 't'))
@@ -79,6 +81,10 @@ if (nrow(PLScoef)==3) { # 5= 2(Stkcd+alpha) + 3 factors
     stkff <- subset(stkest, select=c(Stkcd, Dretwd, RiskPrem))
     modeltype <- 'CAPM'
 }
+
+cdgrp <- paste(Accprd, Pretype, modeltype, weekterm,'group', sep='_') %>%
+  paste0(datadir, ., '.csv')
+write.csv(PLSgrp, file=cdgrp, quote=F, row.names = F)
 
 
 windlen <- 240L
@@ -170,6 +176,9 @@ colnames(QEAcar) <- c(paste0('g',1:grpnum,'_PLS')) # Calculative abnormal return
 
 
 
+QEAcar <- mutate(QEAcar,sum=rowSums(QEAcar)/2)
+
+
 # Output 
 paste(Accprd, Pretype, modeltype, weekterm,'CAR', sep='_') %>%
     paste0(datadir, ., '.csv') %>%
@@ -183,7 +192,7 @@ titchar <- paste0('Paths of cumulative abnormal return (CAR) ',
                   '\nattributed to quarterly earnings announcement ',
                   'arround accountting period ', Accprd)
 ggcar <- data.frame(matrix(0,windlen*grpnum,3))
-for (i in 1:grpnum) {
+for (i in 1:(grpnum+1)) {
     ifelse(i==1, ggcar[(1:windlen),] <- cbind(timeline,QEAcar[,i],c(i)),
            ggcar[(i-1)*windlen + (1:windlen), ] <- cbind(timeline,QEAcar[,i],c(i)))
 }
@@ -197,21 +206,23 @@ library(ggplot2)
 pdf(paste(Accprd, Pretype, modeltype, weekterm, 'CAR', sep='_') %>%
         paste0(datadir, ., '.pdf'))
 
-if (grpnum==2) {
-    ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
-        labs(title = titchar, x="Time line", colour="Group") + 
-        theme(plot.title = element_text(size=11), 
-              axis.ticks.y = element_blank()) +
-        scale_colour_discrete(labels=expression(beta['MKT'] == PLS_G1, 
-                                                beta['MKT'] == PLS_G2))
-} else if (grpnum==3) {
+if (grpnum+1==4) {
     ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
         labs(title = titchar, x="Time line", colour="Group") + 
         theme(plot.title = element_text(size=11), 
               axis.ticks.y = element_blank()) +
         scale_colour_discrete(labels=expression(beta['MKT'] == PLS_G1, 
                                                 beta['MKT'] == PLS_G2,
-                                                beta['MKT'] == PLS_G3)) 
+                                                beta['MKT'] == PLS_G2,
+                                                beta['MKT'] == sum))
+} else if (grpnum+1==3) {
+    ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
+        labs(title = titchar, x="Time line", colour="Group") + 
+        theme(plot.title = element_text(size=11), 
+              axis.ticks.y = element_blank()) +
+        scale_colour_discrete(labels=expression(beta['MKT'] == PLS_G1, 
+                                                beta['MKT'] == PLS_G2,
+                                                beta['MKT'] == sum)) 
 } else print('Group number is error')
 
 

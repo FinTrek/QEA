@@ -1,6 +1,6 @@
 % reshape data
 
-TradStatFF = FF5wkdTradStat;
+TradStatFF = wekbindTradStat;
 DaRet  = TradStatFF(:,1);
 MKT    = TradStatFF(:,2);
 ThrSMB = TradStatFF(:,3);
@@ -10,14 +10,14 @@ FivHML = TradStatFF(:,6);
 FivRMW = TradStatFF(:,7);
 FivCMA = TradStatFF(:,8);
 
-Index = FF5wkdMATdex;
+Index = wekbindMATdex;
 code = Index(:,1);
 day  = Index(:,2);
 
-stkcd = FF5wkdstkcd;
+stkcd = wekbindstkcd;
 
 %%
-clear('FF5wkdTradStat', 'FF5wkdMATdex', 'FF5wkdstkcd', 'TradStatFF', 'Index')
+clear('wekdTradStat', 'wkdMATdex', 'wkdstkcd', 'TradStatFF', 'Index')
 
 %%
 

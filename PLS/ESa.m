@@ -1,4 +1,3 @@
-clear all
 global p K_max
 
 cvx_solver mosek
@@ -7,7 +6,23 @@ IC_needed = 1;
 tol = 0.0001;
 R = 80;
 
-load('QEAFF.mat')
+
+TradStatFF = wekbindestTradStat;
+Index = wekbindestMATdex;
+stkcd = wekbindeststkcd;
+
+DaRet  = TradStatFF(:,1);
+MKT    = TradStatFF(:,2);
+ThrSMB = TradStatFF(:,3);
+ThrHML = TradStatFF(:,4);
+FivSMB = TradStatFF(:,5);
+FivHML = TradStatFF(:,6);
+FivRMW = TradStatFF(:,7);
+FivCMA = TradStatFF(:,8);
+
+code = Index(:,1);
+day  = Index(:,2);
+
 X = [MKT, ThrSMB, ThrHML];
 y = DaRet;
 
