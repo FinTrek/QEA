@@ -4,7 +4,8 @@ library(timeDate)
 
 
 # setting the data directory
-datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData'
+datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData/'
+datadir <- 'D:/NutSync/MyData/QEAData/'
 
 
 # Input daily trading data ====================================================
@@ -123,7 +124,7 @@ PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
 
     
     ## save the image of aggregate information
-    cdimage <- paste0(datadir, 'TRDFF-Pept', '.RData') %>% save.image()
+    cdimage <- paste0(datadir, 'TRDFF-Rept', '.RData') %>% save.image()
 
 
 
