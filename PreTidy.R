@@ -3,9 +3,11 @@ library(lubridate)
 library(timeDate)
 
 
+# setting the data directory
+datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData'
+
 
 # Input daily trading data ====================================================
-datadir <- 'C:/Users/Hu/Documents/R/Data/'
 filecd <- dir(datadir, pattern = '^TRD_Dalyr.*?[.]csv$') %>% paste0(datadir, .)
 TRD <- data.frame()
 for (i in filecd) {
@@ -92,14 +94,10 @@ if (all.equal(TRDFF$RiskPrem, TRDFF$RiskPremium)) {
 rm(TRD); str(TRDFF)
 
 
-
+    ## output the Trading data
     paste0(datadir, 'TradFF', '.csv') %>%
     write.csv(TRDFF, file=., quote=F, row.names = F)
 
-    
-    
-## save the image
-cdimage <- paste0(datadir, 'TRDFF', '.RData') %>% save.image()
     
         
 
@@ -121,22 +119,30 @@ PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
     paste0(datadir, .) %>%
     read_delim(delim='\t', na = '') %>%
     select(StockCode, Source, PubliDate, AccPeriod)
+
+
+    
+    ## save the image of aggregate information
+    cdimage <- paste0(datadir, 'TRDFF-Pept', '.RData') %>% save.image()
+
+
+
 ## 0,选取之前发布业绩预告的企业
 ## 1,选取之前发布定期公告的企业
-## c(0,1), 选取之前发布有信息的企业，即0、1两类企业之加和
-## 2,选取之前毫无预告的企业，即从总样本中去除0、1两类企业
-## 3,总样本中去除发布业绩预告的企业
-## 4,总样本中去除发布定期公告的企业
-## 若全部都要，输入5即可（实质上除上述数字皆可）
-Pretype <- c(0,1)
+## 2,选取之前发布有信息的企业，即0、1两类企业之加和
+## 3,选取之前毫无预告的企业，即从总样本中去除0、1两类企业
+## 4,总样本中去除发布业绩预告的企业
+## 5,总样本中去除发布定期公告的企业
+## 若全部都要，输入6即可（实质上除上述数字皆可）
+Pretype <- c(0,1,3,6)
 
 
 
-# Accounting period of quarterly earnings report ==================================
-# 03-31, the first quarter; 06-30, the second quarter 
-# 09-30, the third quarter; 12-31, the fourth quarter 
-# for example, 2018-12-31 meanings that
-# we concentrated on the fourth quarter of year 2018
+## Accounting period of quarterly earnings report ==================================
+## 03-31, the first quarter; 06-30, the second quarter 
+## 09-30, the third quarter; 12-31, the fourth quarter 
+## for example, 2018-12-31 meanings that
+## we concentrated on the fourth quarter of year 2018
 Accprd <- as.Date(c('2015-09-30','2016-09-30', '2017-09-30'), '%Y-%m-%d')
 
 
@@ -202,7 +208,7 @@ for (A in 1:length(Accprd)) {
                      stkbrk <- rbind(stkbrk, subReptInfo[i,]))
         } else stkbrk <- rbind(stkbrk, subReptInfo[i,])
     }
-      rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date, n.row)
+    rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date, n.row)
     
       
       
@@ -234,22 +240,29 @@ for (A in 1:length(Accprd)) {
             
             if(P %in% c(0,1)) {
                 stktrdp <- data.frame()
-                Prestk <- filter(subPreRept, Source %in% P)$StockCode
+                Prestk <- filter(subPreRept, Source == P)$StockCode
                 for (i in Prestk) {
                     TRDaln <- filter(stktrd, Stkcd==i)
                     stktrdp <- rbind(stktrdp, TRDaln)
-                } 
-            } else if (P == 2) {
+                }
+            } else if (P==2) {
+                stktrdp <- data.frame()
+                Prestk <- filter(subPreRept, Source %in% c(0,1))$StockCode
+                for (i in Prestk) {
+                    TRDaln <- filter(stktrd, Stkcd==i)
+                    stktrdp <- rbind(stktrdp, TRDaln)
+                }
+            } else if (P == 3) {
                 stktrdp <- stktrd
                 for (i in subPreRept$StockCode) {
                     stktrdp <- filter(stktrdp, Stkcd!=i)}
-            } else if (P == 3) {
+            } else if (P == 4) {
                 stktrdp <- stktrd
                 Prestk <- filter(subPreRept, Source == 0 )$StockCode
                 for (i in Prestk) {
                     stktrdp <- filter(stktrdp, Stkcd!=i)
                 }
-            } else if(P == 4) {
+            } else if(P == 5) {
                 stktrdp <- stktrd
                 Prestk <- filter(subPreRept, Source == 1 )$StockCode
                 for (i in Prestk) {
@@ -265,25 +278,27 @@ for (A in 1:length(Accprd)) {
             # 8=GST, 9=G*ST, 10=U(2006年10月9日之前股改未完成)
             # 11=UST, 12=U*ST, 13=N, 14=NST, 15=N*ST, 16=PT       
             Trdstatype <- c(1, 2)
-            stktrdp <- filter(stktrdp, Trdsta %in% Trdstatype) %>% select(-Trdsta)
+            stktrdp <- filter(stktrdp, Trdsta %in% Trdstatype) %>% 
+                subset(select= -Trdsta)
             
             
             
-            ## Market type 股票交易市场, 1=上海A, 4=深圳A, 16=创业板 ===================
-            mkttype <- c(1+4) # key
+            # Market type 股票交易市场, 1=上海A, 4=深圳A, 16=创业板 ===================
+            ## 5:上海＋深圳, 其它数字则为三板总和
+            mkttype <- c(1, 4, 5) # key
             
             
             for (M in mkttype) {
                 
                 if (M %in% c(1,4,16)) {
-                    stkdat <- filter(stktrdp, Markettype %in% M) 
+                    stkdat <- filter(stktrdp, Markettype == M) 
                 } else if (M==5) {
                     stkdat <- filter(stktrdp, Markettype %in% c(1,4)) 
                 } else {
                     stkdat <- filter(stktrdp, Markettype %in% c(1,4,16)) 
                   }
                 
-                stkdat <- subset(stkdat, select(-Markettype))
+                stkdat <- subset(stkdat, select= - Markettype)
                 
                 
                 ## Generate the simple-cd of the stocks in sample and
