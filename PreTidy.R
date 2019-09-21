@@ -1,11 +1,9 @@
 library(tidyverse)
-library(lubridate)
-library(timeDate)
-
+library(timeDate, lubridate)
 
 # setting the data directory
-datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData/'
-datadir <- 'D:/NutSync/MyData/QEAData/'
+datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData/'  # Hu, PC-Carbon
+datadir <- 'D:/NutSync/MyData/QEAData/' # HHY, PC-HP 
 
 
 # Input daily trading data ====================================================
@@ -13,21 +11,24 @@ filecd <- dir(datadir, pattern = '^TRD_Dalyr.*?[.]csv$') %>% paste0(datadir, .)
 TRD <- data.frame()
 for (i in filecd) {
     TRDS <- read_delim(i, delim='\t', na = '') %>%
-        rename('TradingDate' = Trddt) %>%
-        subset(select=c(Stkcd,TradingDate,Dretwd,Markettype,Trdsta))
+              rename('TradingDate' = Trddt) %>%
+              subset(select=c(Stkcd,TradingDate,Dretwd,Markettype,Trdsta))
     TRD <- rbind(TRD,TRDS)
 }
+
+# Sorting by trading date and then through stock code
 TRD <- arrange(TRD, TradingDate) %>% arrange(Stkcd)
+
+
+# transform the data class from date to character,
+# in order to match substring (year and month) in next process
 TRD$TradingDate <- as.character(TRD$TradingDate)
-
-
-
-
 # R^i minus R^f ================================================================
-ThrMonRisk <- dir(datadir, pattern = 'FreePremium.csv$') %>%
-    paste0(datadir, .) %>%
-    read_delim(delim = ',', na = '', col_names = T, col_types = cols(
-        Month = col_character(), rate = col_double())) %>% as.data.frame()
+ThrMonRisk <- dir(datadir, pattern = 'FreePremium[.]csv$') %>%
+                paste0(datadir, .) %>%
+                read_delim(delim = ',', na = '', col_names = T, 
+                           col_types = cols(Month = col_character(), rate = col_double())) %>% 
+                as.data.frame()
 for (i in 1:nrow(ThrMonRisk)) {
     Mon <- ThrMonRisk[i,"Month"]
     ThrRf <- ThrMonRisk[i,"rate"] /100 
@@ -44,12 +45,12 @@ rm(filecd,TRDS,Mon,ThrRf,DaiRf,Daterow)
 ## Fama-French three factor =====================================================
 
 FF3 <- dir(datadir, pattern = 'ThrfacDay.txt$') %>%
-    paste0(datadir, .) %>%
-    read_delim(delim='\t', na = '')
+       paste0(datadir, .) %>%
+       read_delim(delim='\t', na = '')
 # Weighted in Total Market Value
 FF3 <- subset(FF3, MarkettypeID=='P9709', seq(from=2,to=8,by=2)) %>% 
-    set_names(c('TradingDate','RiskPrem','Thr_SMB','Thr_HML')) %>% 
-    arrange(TradingDate)
+       set_names(c('TradingDate','RiskPrem','Thr_SMB','Thr_HML')) %>% 
+       arrange(TradingDate)
 
 # Setup Working day arround QEA
 FF3$TradingDate <- as.Date(FF3$TradingDate,'%Y-%m-%d')
@@ -61,17 +62,17 @@ WorkingDay <- FF3$TradingDate
 ## Fama-French five factor ======================================================
 
 FF5 <- dir(datadir, pattern = 'FivefacDay.txt$') %>%
-    paste0(datadir, .) %>%
-    read_delim(delim='\t', na = '')
+       paste0(datadir, .) %>%
+       read_delim(delim='\t', na = '')
 
 # Sorting stocks in 2*3 portfolios
 FF5 <- filter(FF5, Portfolios==1) # key
 
 # Weighted in Total Market Value
 FF5 <- subset(FF5, MarkettypeID=='P9709', c(TradingDate, seq(from=5,to=13,by=2))) %>% 
-    set_names(c('TradingDate','RiskPremium','Five_SMB','Five_HML',
-                'Five_RMW','Five_CMA')) %>% 
-    arrange(TradingDate)
+       set_names(c('TradingDate','RiskPremium','Five_SMB','Five_HML',
+                   'Five_RMW','Five_CMA')) %>% 
+       arrange(TradingDate)
 
 FF5$TradingDate <- as.Date(FF5$TradingDate,'%Y-%m-%d')
 
@@ -80,8 +81,8 @@ FF5$TradingDate <- as.Date(FF5$TradingDate,'%Y-%m-%d')
 
 ## Merge =========================================================================
 TRDFF <- merge(TRD, FF3, by='TradingDate') %>%
-    merge(FF5, by='TradingDate') %>%
-    arrange(Stkcd)
+         merge(FF5, by='TradingDate') %>%
+         arrange(Stkcd)
 
 if (all.equal(TRDFF$RiskPrem, TRDFF$RiskPremium)) {
     TRDFF <- subset(TRDFF, select=c(Stkcd,TradingDate,Dretwd,RiskPrem,
@@ -104,11 +105,11 @@ rm(TRD); str(TRDFF)
 
 ## announcement date of quarterly financial report ================================
 ReptInfo <- dir(datadir, pattern = 'Rept.csv$') %>%
-    paste0(datadir, .) %>%
-    read_delim(delim='\t', na = '') %>%
-    subset(select=c(Stkcd,Annodt,Accper,Annowk,Sctcd))  %>% 
-    arrange(Stkcd) %>%
-    as.data.frame()
+            paste0(datadir, .) %>%
+            read_delim(delim='\t', na = '') %>%
+            subset(select=c(Stkcd,Annodt,Accper,Annowk,Sctcd))  %>% 
+            arrange(Stkcd) %>%
+            as.data.frame()
 
 ReptInfo$Annodt <- as.Date(ReptInfo$Annodt,'%Y-%m-%d')
 
@@ -117,10 +118,10 @@ ReptInfo$Annodt <- as.Date(ReptInfo$Annodt,'%Y-%m-%d')
 
 ## Stocks whether had published ex-earnings report or not ==============
 PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
-    paste0(datadir, .) %>%
-    read_delim(delim='\t', na = '') %>%
-    select(StockCode, Source, PubliDate, AccPeriod)
-
+           paste0(datadir, .) %>%
+           read_delim(delim='\t', na = '') %>%
+           select(StockCode, Source, PubliDate, AccPeriod)
+        
 
     
     ## save the image of aggregate information
@@ -144,7 +145,8 @@ Pretype <- c(0,1,3,6)
 ## 09-30, the third quarter; 12-31, the fourth quarter 
 ## for example, 2018-12-31 meanings that
 ## we concentrated on the fourth quarter of year 2018
-Accprd <- as.Date(c('2015-09-30','2016-09-30', '2017-09-30'), '%Y-%m-%d')
+Accprd <- as.Date(c('2013-09-30','2014-09-30','2015-09-30','2016-09-30','2017-09-30'), 
+                  '%Y-%m-%d')
 
 
 
@@ -323,8 +325,8 @@ for (A in 1:length(Accprd)) {
 
                         stkest <- data.frame()
                         for (i in unique(stkdat$Stkcd)) {
-                          stksim <- filter(stkdat, Stkcd==i) %>% .[c(exdate:bhdate),]
-                          stkest <- rbind(stkest, stksim)
+                            stksim <- filter(stkdat, Stkcd==i) %>% .[c(exdate:bhdate),]
+                            stkest <- rbind(stkest, stksim)
                         }
                         rm(stksim)
                     
@@ -332,19 +334,19 @@ for (A in 1:length(Accprd)) {
                         ## Output the estimation data =======================================
                         
                         paste(subAccprd, P, weekterm, 'est','TradStat', sep='_') %>%
-                            paste0(datadir, ., '.csv') %>%
-                            write.csv(stkest, file=., quote=F, row.names = F)
+                        paste0(datadir, ., '.csv') %>%
+                        write.csv(stkest, file=., quote=F, row.names = F)
                         ## the sample stock code
                         paste(subAccprd, P, weekterm,'est','stkcd', sep='_') %>%
-                            paste0(datadir, ., '.csv') %>%
-                            write.csv(TSN, file=., quote=F, row.names = F)
+                        paste0(datadir, ., '.csv') %>%
+                        write.csv(TSN, file=., quote=F, row.names = F)
                         
                         ## stock code, day index in MATLAB 
                         MATdex <- cbind("Stkcd"=rep(1:length(TSN), each=bhdate-exdate+1),
                                         "day"=rep(seq(from=1, to=bhdate-exdate+1, by=1), times=length(TSN))) 
                         paste(subAccprd, P, weekterm, 'est', 'MATdex', sep='_') %>%
-                            paste0(datadir, ., '.csv') %>%
-                            write.csv(MATdex, file=., quote=F, row.names = F)
+                        paste0(datadir, ., '.csv') %>%
+                        write.csv(MATdex, file=., quote=F, row.names = F)
                     
                     
                     } else {
@@ -362,8 +364,8 @@ for (A in 1:length(Accprd)) {
                         ## Output the event window data =======================================
                         
                         paste(subAccprd, P, weekterm, 'eve', 'TradStat', sep='_') %>%
-                            paste0(datadir, ., '.csv') %>%
-                            write.csv(stkeve, file=., quote=F, row.names = F)
+                        paste0(datadir, ., '.csv') %>%
+                        write.csv(stkeve, file=., quote=F, row.names = F)
                         
                     }
                 }

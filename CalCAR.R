@@ -1,11 +1,11 @@
 library(tidyverse)
 
 # Input window data ===========================================================
-datadir <- '~/NutSync/QEA/Data/'
+datadir <- '~/NutSync/MyData/QEAData/'
 
 # Specifying trem information
 Accprd <- '2017-09-30'
-Pretype <- '5'
+Pretype <- '6'
 weekterm <- 'wekbind'
 
 
@@ -44,7 +44,7 @@ grpnum <- length(unique(PLSclus))
 PLSgrp <- data.frame()
 samnum <- c()
 for (i in 1:grpnum) {
-    sam <- Stkcd[PLSclus==i,1]
+    sam <- Stkcd[PLSclus==i, 1]
     samn <- nrow(sam)
     sam <- cbind(sam,c(i))
     PLSgrp <- rbind(PLSgrp, sam)
@@ -83,7 +83,7 @@ if (nrow(PLScoef)==3) { # 5= 2(Stkcd+alpha) + 3 factors
 }
 
 cdgrp <- paste(Accprd, Pretype, modeltype, weekterm,'group', sep='_') %>%
-  paste0(datadir, ., '.csv')
+         paste0(datadir, ., '.csv')
 write.csv(PLSgrp, file=cdgrp, quote=F, row.names = F)
 
 
@@ -129,7 +129,7 @@ if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
 
 # solve the problem of data type (factor to numeric)
 cdcoef <- paste(Accprd, Pretype, modeltype, weekterm,'OLScoef', sep='_') %>%
-    paste0(datadir, ., '.csv')
+          paste0(datadir, ., '.csv')
 write.csv(OLScoef, file=cdcoef, quote=F, row.names = F)
 OLScoef <- as.data.frame(read_delim(cdcoef, delim=',', na = '')); rm(cdcoef)
 OLScoef[, 3:ncol(OLScoef)] <- round(OLScoef[, 3:ncol(OLScoef)], 6)
@@ -160,6 +160,22 @@ QEAabr <- as.data.frame(QEAabr)[,-c(1)] # Abnormal returns
 rm(subsam, evedat, w, stkfit, AbRet, stkabr)
 
 
+# Output the abnormal returns
+for (i in 1:grpnum) {
+    if (i == 1) {
+        paste(Accprd, Pretype, modeltype, weekterm, 'group', i, 'AR', sep='_') %>%
+            paste0(datadir, ., '.csv') %>%
+            write.csv(QEAabr[,c(1:(samnum[i]+1))], file=., quote=F, row.names = F)
+    } else {
+        paste(Accprd, Pretype, modeltype, weekterm, 'group', i, 'AR', sep='_') %>%
+            paste0(datadir, ., '.csv') %>%
+            write.csv(QEAabr[,c((i+sum(samnum[1:(i-1)])) : (i+sum(samnum[1:i])))], 
+                      file=., quote=F, row.names = F)
+    }
+}
+
+
+
 QEAcar <- as.data.frame(matrix(c(length(windlen*grpnum)),windlen,grpnum))
 for (i in 1:grpnum) {
     ifelse(i==1,
@@ -181,8 +197,8 @@ QEAcar <- mutate(QEAcar,sum=rowSums(QEAcar)/2)
 
 # Output 
 paste(Accprd, Pretype, modeltype, weekterm,'CAR', sep='_') %>%
-    paste0(datadir, ., '.csv') %>%
-    write.csv(QEAcar, file=., quote=F, row.names = F)
+paste0(datadir, ., '.csv') %>%
+write.csv(QEAcar, file=., quote=F, row.names = F)
 
 
 
@@ -204,27 +220,32 @@ ggcar$group <- as.factor(ggcar$group)
 library(ggplot2)
 
 pdf(paste(Accprd, Pretype, modeltype, weekterm, 'CAR', sep='_') %>%
-        paste0(datadir, ., '.pdf'))
+    paste0(datadir, ., '.pdf'))
 
 if (grpnum+1==4) {
-    ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
-        labs(title = titchar, x="Time line", colour="Group") + 
-        theme(plot.title = element_text(size=11), 
-              axis.ticks.y = element_blank()) +
-        scale_colour_discrete(labels=expression(beta['MKT'] == PLS_G1, 
-                                                beta['MKT'] == PLS_G2,
-                                                beta['MKT'] == PLS_G2,
-                                                beta['MKT'] == sum))
+  ggplot(ggcar, aes(timeline, CAR, 
+                    linetype = group, colour = group)) + 
+    geom_line() + geom_point() +
+    scale_linetype_manual(name='Group',values=c("solid", 'solid', 'solid', "dotted"),
+                          labels=c('PLS_G1', 'PLS_G2', 'PLS_G3','Unclassified')) +
+    scale_colour_manual(name="Group", values = c("blue", "red", 'green', "black"),
+                        labels=c('PLS_G1', 'PLS_G2', 'PLS_G3','Unclassified')) +
+    labs(title = titchar, x = "Time line", y = 'Cumulative Abnormal Return') + 
+    theme(plot.title = element_text(size=11), 
+          axis.ticks.y = element_blank())
+  
 } else if (grpnum+1==3) {
-    ggplot(ggcar) + geom_path(size=1, aes(timeline, CAR, colour = group))  +
-        labs(title = titchar, x="Time line", colour="Group") + 
+    ggplot(ggcar, aes(timeline, CAR, 
+                      linetype = group, colour = group)) + 
+        geom_line() + geom_point() +
+        scale_linetype_manual(name='Group',values=c("solid", 'solid', "dotted"),
+                              labels=c('PLS_G1', 'PLS_G2', 'Unclassified')) +
+        scale_colour_manual(name="Group", values = c("blue", "red", "black"),
+                        labels=c('PLS_G1', 'PLS_G2', 'Unclassified')) +
+        labs(title = titchar, x = "Time line", y = 'Cumulative Abnormal Return') + 
         theme(plot.title = element_text(size=11), 
-              axis.ticks.y = element_blank()) +
-        scale_colour_discrete(labels=expression(beta['MKT'] == PLS_G1, 
-                                                beta['MKT'] == PLS_G2,
-                                                beta['MKT'] == sum)) 
+              axis.ticks.y = element_blank())
 } else print('Group number is error')
-
 
 
 dev.off()
@@ -237,7 +258,7 @@ require(grid)
 library(latex2exp)
 
 pdf(paste(Accprd, Pretype, modeltype, weekterm, 'OLScoefdis', sep='_') %>%
-        paste0(datadir, ., '.pdf'))
+    paste0(datadir, ., '.pdf'))
 
 grid.newpage()
 vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)}
