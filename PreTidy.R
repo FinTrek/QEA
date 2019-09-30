@@ -1,30 +1,36 @@
 library(tidyverse)
-library(timeDate, lubridate)
+library(timeDate)
+library(lubridate)
 
 # setting the data directory
 datadir <- 'C:/Users/Hu/Documents/NutSync/MyData/QEAData/'  # Hu, PC-Carbon
 datadir <- 'D:/NutSync/MyData/QEAData/' # HHY, PC-HP 
 
 
-# Input daily trading data ====================================================
+# Input the data of daily trading status of stocks =============================
+# in China Mainland from 2010 to 2019 
 filecd <- dir(datadir, pattern = '^TRD_Dalyr.*?[.]csv$') %>% paste0(datadir, .)
 TRD <- data.frame()
 for (i in filecd) {
-    TRDS <- read_delim(i, delim='\t', na = '') %>%
+    TRDS <- read_delim(i, delim='\t', na = '',
+                       col_types = cols(Stkcd = col_character(),
+                                        Trddt = col_date(format = '%Y-%m-%d'),
+                                        Markettype = col_integer(),
+                                        Trdsta = col_integer())) %>%
               rename('TradingDate' = Trddt) %>%
               subset(select=c(Stkcd,TradingDate,Dretwd,Markettype,Trdsta))
     TRD <- rbind(TRD,TRDS)
 }
 
-# Sorting by trading date and then through stock code
+# Sorting by trading date and then by stock code
 TRD <- arrange(TRD, TradingDate) %>% arrange(Stkcd)
 
 
 # transform the data class from date to character,
-# in order to match substring (year and month) in next process
+# in order to match year and month in next process
 TRD$TradingDate <- as.character(TRD$TradingDate)
 # R^i minus R^f ================================================================
-ThrMonRisk <- dir(datadir, pattern = 'FreePremium[.]csv$') %>%
+ThrMonRisk <- dir(datadir, pattern = '^RiskFreePremium[.]csv$') %>%
                 paste0(datadir, .) %>%
                 read_delim(delim = ',', na = '', col_names = T, 
                            col_types = cols(Month = col_character(), rate = col_double())) %>% 
@@ -41,32 +47,28 @@ rm(filecd,TRDS,Mon,ThrRf,DaiRf,Daterow)
 
 
 
-
 ## Fama-French three factor =====================================================
 
-FF3 <- dir(datadir, pattern = 'ThrfacDay.txt$') %>%
+FF3 <- dir(datadir, pattern = 'ThrfacDay[.]csv$') %>%
        paste0(datadir, .) %>%
-       read_delim(delim='\t', na = '')
+       read_delim(delim='\t', na = '',
+                  col_types = cols(TradingDate = col_date('%Y-%m-%d')))
 # Weighted in Total Market Value
-FF3 <- subset(FF3, MarkettypeID=='P9709', seq(from=2,to=8,by=2)) %>% 
+FF3 <- subset(FF3, MarkettypeID=='P9706', seq(from=2,to=8,by=2)) %>% 
        set_names(c('TradingDate','RiskPrem','Thr_SMB','Thr_HML')) %>% 
        arrange(TradingDate)
-
-# Setup Working day arround QEA
-FF3$TradingDate <- as.Date(FF3$TradingDate,'%Y-%m-%d')
-WorkingDay <- FF3$TradingDate
-
 
 
 
 ## Fama-French five factor ======================================================
 
-FF5 <- dir(datadir, pattern = 'FivefacDay.txt$') %>%
+FF5 <- dir(datadir, pattern = 'FivefacDay[.]csv$') %>%
        paste0(datadir, .) %>%
-       read_delim(delim='\t', na = '')
+       read_delim(delim='\t', na = '',
+                  col_types = cols(TradingDate = col_date('%Y-%m-%d')))
 
 # Sorting stocks in 2*3 portfolios
-FF5 <- filter(FF5, Portfolios==1) # key
+FF5 <- filter(FF5, Portfolios == 1) # key
 
 # Weighted in Total Market Value
 FF5 <- subset(FF5, MarkettypeID=='P9709', c(TradingDate, seq(from=5,to=13,by=2))) %>% 
@@ -74,14 +76,12 @@ FF5 <- subset(FF5, MarkettypeID=='P9709', c(TradingDate, seq(from=5,to=13,by=2))
                    'Five_RMW','Five_CMA')) %>% 
        arrange(TradingDate)
 
-FF5$TradingDate <- as.Date(FF5$TradingDate,'%Y-%m-%d')
-
 
 
 
 ## Merge =========================================================================
 TRDFF <- merge(TRD, FF3, by='TradingDate') %>%
-         merge(FF5, by='TradingDate') %>%
+         #merge(FF5, by='TradingDate') %>%
          arrange(Stkcd)
 
 if (all.equal(TRDFF$RiskPrem, TRDFF$RiskPremium)) {
@@ -96,77 +96,111 @@ if (all.equal(TRDFF$RiskPrem, TRDFF$RiskPremium)) {
 rm(TRD); str(TRDFF)
 
 
+
     ## output the Trading data
     paste0(datadir, 'TradFF', '.csv') %>%
     write.csv(TRDFF, file=., quote=F, row.names = F)
 
-    
-        
+
 
 ## announcement date of quarterly financial report ================================
 ReptInfo <- dir(datadir, pattern = 'Rept.csv$') %>%
             paste0(datadir, .) %>%
-            read_delim(delim='\t', na = '') %>%
+            read_delim(delim='\t', na = '',
+                       col_types = cols(Annodt = col_date(format = "%Y-%m-%d"))) %>%
             subset(select=c(Stkcd,Annodt,Accper,Annowk,Sctcd))  %>% 
             arrange(Stkcd) %>%
             as.data.frame()
 
-ReptInfo$Annodt <- as.Date(ReptInfo$Annodt,'%Y-%m-%d')
 
 
 
-
-## Stocks whether had published ex-earnings report or not ==============
+## Stocks whether had published ex-earnings report or not =========================
 PreRept <- dir(datadir, pattern = 'ForecFin.csv$') %>%
            paste0(datadir, .) %>%
-           read_delim(delim='\t', na = '') %>%
+           read_delim(delim='\t', na = '',
+                      col_types = cols(PubliDate = col_date(format = "%Y-%m-%d"),
+                                       AccPeriod = col_date(format = "%Y-%m-%d"))) %>%
            select(StockCode, Source, PubliDate, AccPeriod)
         
 
     
+
+# Setup Working day arround QEA ===================================================
+WorkingDay <- dir(datadir, pattern = 'TRD_Cale[.]csv$') %>%
+    paste0(datadir, .) %>%
+    read_delim(delim='\t', na = '',
+                col_types = cols(Markettype = col_integer(),
+                                 Daywk = col_integer(),
+                                 Clddt = col_date(format = "%Y-%m-%d"),
+                                 State = col_factor(levels = c('C', 'O'))))
+
+    
+# Assure the trading date is same between shanghai-A and shenzhen-A markets.
+if (all.equal(subset(WorkingDay, Markettype == 1, select = c(State)),
+    subset(WorkingDay, Markettype == 4, select = c(State))) == 1) {
+    WorkingDay <- subset(WorkingDay, Markettype == 1 & State == 'O', select = c(Clddt))$Clddt
+} else {print('Error! The public trading date of shanghai-A and shenzhen-A markets are different.')}
+
+
+
     ## save the image of aggregate information
-    cdimage <- paste0(datadir, 'TRDFF-Rept', '.RData') %>% save.image()
+    paste0(datadir, 'TRDFF-Rept', '.RData') %>% save.image()
 
 
-
-## 0,选取之前发布业绩预告的企业
-## 1,选取之前发布定期公告的企业
-## 2,选取之前发布有信息的企业，即0、1两类企业之加和
-## 3,选取之前毫无预告的企业，即从总样本中去除0、1两类企业
-## 4,总样本中去除发布业绩预告的企业
-## 5,总样本中去除发布定期公告的企业
-## 若全部都要，输入6即可（实质上除上述数字皆可）
-Pretype <- c(0,1,3,6)
+    
+ 
+# The aggregate data has formed, and then
+# we generate the sub-sample in every quarterly. 
+# First, we set the classification parameter ====================================
 
 
+    Pretype <- c(2,3,6)
+## 0, select the companies that released the **performance forecast**
+## 1, Select the companies that issued the **Regular Announcement**
+## 2, Select the enterprises that has published information (pre-announcement or announcement), 
+##    that is, the sum of the two types of enterprises, 0 and 1.
+## 3, Select the enterprises that has no previous information release, 
+##    that is, remove the 0 and 1 enterprises from the total sample.
+## 4, Remove the companies that released the performance forecast in the total sample
+## 5, Remove the companies that published regular announcements in the total sample
+## If all stocks are required, enter 6 (actually, all numbers except the above numbers is OK)
 
+
+    weekterm <- c('wekbind')
+# Select the stocks which announcemented on week-day(stkwek) =====================
+# weekend-day(stkwnd), or all of them(wekbind, rbind(stkwek, stkwnd))
+    
+
+    Accprd <- as.Date(c('2015-09-30','2016-09-30','2017-09-30'), 
+                      format = '%Y-%m-%d')
 ## Accounting period of quarterly earnings report ==================================
 ## 03-31, the first quarter; 06-30, the second quarter 
 ## 09-30, the third quarter; 12-31, the fourth quarter 
 ## for example, 2018-12-31 meanings that
 ## we concentrated on the fourth quarter of year 2018
-Accprd <- as.Date(c('2013-09-30','2014-09-30','2015-09-30','2016-09-30','2017-09-30'), 
-                  '%Y-%m-%d')
 
 
 
-for (A in 1:length(Accprd)) {
-    
+for (A in 1:length(Accprd)) { # loop in accounting period
+
+  
     subAccprd <- Accprd[A]
     
-    # subset
+    # subset of the aggregate data
     TRDFFSAM <- filter(TRDFF, TradingDate %within% 
-                       interval(subAccprd %m+% months(-16), subAccprd %m+% months(+6)))
+                       interval(subAccprd %m+% months(-10), subAccprd %m+% months(+12)))
     
     subReptInfo <- filter(ReptInfo, Accper == subAccprd)
     
     subPreRept  <- filter(PreRept, AccPeriod == subAccprd)
     
-        
-    ## Matching ====================================================================
+
     
-    exwind <- -270L
-    bhwind <- +40L
+    ## Matching ====================================================================
+    ## this process is the most important port in this program
+    exwind <- -130L
+    bhwind <- +130L # Notice: we will have length of **260+1** time series data
     stkwek <- data.frame()
     stkwnd <- data.frame()
     stkbrk <- data.frame()
@@ -176,12 +210,10 @@ for (A in 1:length(Accprd)) {
         if (subReptInfo[i,'Annodt'] %in% WorkingDay) {
             n.row <- which(WorkingDay==subReptInfo[i,'Annodt'])
             QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
-            for (i in 1:length(QEA.date)) {
-                QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
-                QEAgrp <- rbind(QEAgrp, QEAsim)
-              }
+            QEAgrp <- filter(stkts, TradingDate %in% QEA.date)
               ifelse(nrow(QEAgrp) == bhwind-exwind +1,
-                     stkwek <- rbind(stkwek, QEAgrp),
+                    {QEAgrp <- cbind(QEAgrp, weekday = c(1)) # one for announcement within weekday
+                     stkwek <- rbind(stkwek, QEAgrp)},
                      stkbrk <- rbind(stkbrk, subReptInfo[i,]))
         } else if (wday(subReptInfo[i,'Annodt']) == 7) {
             QEADate <- subReptInfo[i,'Annodt'] + days(2)
@@ -189,12 +221,10 @@ for (A in 1:length(Accprd)) {
                    n.row <- which(WorkingDay==QEADate),
                    stkbrk <- rbind(stkbrk, subReptInfo[i,]))
             QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
-            for (i in 1:length(QEA.date)) {
-                QEAsim <- filter(stkts, TradingDate %in% QEA.date[i])
-                QEAgrp <- rbind(QEAgrp, QEAsim)
-              }
+            QEAgrp <- filter(stkts, TradingDate %in% QEA.date)
               ifelse(nrow(QEAgrp) == bhwind-exwind +1,
-                     stkwnd <- rbind(stkwnd, QEAgrp),
+                    {QEAgrp <- cbind(QEAgrp, weekday = c(0)) # zero for announcement on Saturday
+                     stkwnd <- rbind(stkwnd, QEAgrp)},
                      stkbrk <- rbind(stkbrk, subReptInfo[i,]))
         } else if (wday(subReptInfo[i,'Annodt']) == 1) {
             QEADate <- subReptInfo[i,'Annodt'] + days(1)
@@ -202,30 +232,22 @@ for (A in 1:length(Accprd)) {
                    n.row <- which(WorkingDay==QEADate),
                    stkbrk <- rbind(stkbrk, subReptInfo[i,]))
             QEA.date <- WorkingDay[c((n.row + exwind):(n.row + bhwind))]
-            for (i in 1:length(QEA.date)) {
-                QEAsim <- filter(stkts, TradingDate  %in% QEA.date[i])
-                QEAgrp <- rbind(QEAgrp, QEAsim)
-              }
+            QEAgrp <- filter(stkts, TradingDate  %in% QEA.date)
               ifelse(nrow(QEAgrp) == bhwind-exwind +1,
-                     stkwnd <- rbind(stkwnd, QEAgrp),
+                    {QEAgrp <- cbind(QEAgrp, weekday = c(0)) # zero for announcement on Sunday
+                     stkwnd <- rbind(stkwnd, QEAgrp)},
                      stkbrk <- rbind(stkbrk, subReptInfo[i,]))
         } else stkbrk <- rbind(stkbrk, subReptInfo[i,])
     }
-    rm(QEAgrp, QEAsim, stkts, QEADate, QEA.date, n.row)
-    
-      
-      
-    ## save the image
-    cdimage <- paste0(datadir, subAccprd, '.RData') %>% save.image()
+    rm(QEAgrp, stkts, QEADate, QEA.date, n.row)
     
     
-      
-    # Select the stocks that announcemented on week-day(stkwek) =====================
-    # weekend-day(stkwnd), and all of them(rbind(stkwek, stkwnd))
+        ## save the image
+        paste0(datadir, subAccprd, '.RData') %>% save.image()
     
-    weekterm <- c('wekbind')
     
-    for (W in weekterm) {
+    
+    for (W in weekterm) { # loop in kinds of announcement day within a week
       
 
         if (W == 'weekday') {
@@ -234,11 +256,9 @@ for (A in 1:length(Accprd)) {
             stktrd <- stkwnd
         } else {stktrd <- arrange(rbind(stkwek, stkwnd), Stkcd) }
       
-    
+
         
-        ## Select the stocks whether had published ex-earnings report or not ========
-        
-        for (P in Pretype) {
+        for (P in Pretype) { # loop in kinds of stocks whether has published ex-report or not
             
             
             if(P %in% c(0,1)) {
@@ -272,23 +292,23 @@ for (A in 1:length(Accprd)) {
                     stktrdp <- filter(stktrdp, Stkcd!=i)
                 }
             } else {stktrdp <- stktrd}
-            
-            
-            
+            rm(TRDaln)
+          
+         
+              Trdstatype <- c(1)
+              stktrdp <- filter(stktrdp, Trdsta %in% Trdstatype) %>% 
+                subset(select= -Trdsta)
             ## Trading status ==========================================================
             # 1=正常交易, 2=ST, 3＝*ST, 4＝S(2006年10月9日及之后股改未完成)             
             # 5＝SST, 6＝S*ST, 7=G(2006年10月9日之前已完成股改)
             # 8=GST, 9=G*ST, 10=U(2006年10月9日之前股改未完成)
             # 11=UST, 12=U*ST, 13=N, 14=NST, 15=N*ST, 16=PT       
-            Trdstatype <- c(1, 2)
-            stktrdp <- filter(stktrdp, Trdsta %in% Trdstatype) %>% 
-                subset(select= -Trdsta)
-            
-            
-            
+
+      
+         
+                mkttype <- c(5) 
             # Market type 股票交易市场, 1=上海A, 4=深圳A, 16=创业板 ===================
             ## 5:上海＋深圳, 其它数字则为三板总和
-            mkttype <- c(1, 4, 5) # key
             
             
             for (M in mkttype) {
@@ -301,10 +321,8 @@ for (A in 1:length(Accprd)) {
                     stkdat <- filter(stktrdp, Markettype %in% c(1,4,16)) 
                   }
                 
-                stkdat <- subset(stkdat, select= - Markettype)
                 
-                
-                ## Generate the simple-cd of the stocks in sample and
+                ## Generate the symbols of the stocks in sample and
                 ## assure the time periods not existed errors
                 TSN <- c()
                 for (i in unique(stkdat$Stkcd)) {
@@ -315,43 +333,52 @@ for (A in 1:length(Accprd)) {
                 }
                 
                 
-                ## Extract window data  ==========================================
+                    paste(subAccprd, P, M, weekterm,'est','stkcd', sep='_') %>%
+                      paste0(datadir, ., '.csv') %>%
+                      write.csv(TSN, file=., quote=F, row.names = F)
+                
+                
+                ## Extract window data  ==============================================
                 
                 for (i in 1:2) {
                   
-                    if(i == 1) {
-                        exdate <- 1 # Estimation Window
-                        bhdate <- 240
+                    if(i == 1) {  # Output the data of estimation window: 160 days
+                      
+                        exdate <- 1
+                        bhdate <- 90
+                        exdate.bh <- 172 # 81 trading days for event window
+                        bhdate.bh <- 261
 
                         stkest <- data.frame()
                         for (i in unique(stkdat$Stkcd)) {
-                            stksim <- filter(stkdat, Stkcd==i) %>% .[c(exdate:bhdate),]
+                            stksim <- filter(stkdat, Stkcd==i) %>% 
+                                        .[c(c(exdate:bhdate),c(exdate.bh:bhdate.bh)),]
                             stkest <- rbind(stkest, stksim)
                         }
                         rm(stksim)
                     
                   
-                        ## Output the estimation data =======================================
-                        
-                        paste(subAccprd, P, weekterm, 'est','TradStat', sep='_') %>%
+                        paste(subAccprd, P, M, weekterm, 'est','TradStat', sep='_') %>%
                         paste0(datadir, ., '.csv') %>%
                         write.csv(stkest, file=., quote=F, row.names = F)
-                        ## the sample stock code
-                        paste(subAccprd, P, weekterm,'est','stkcd', sep='_') %>%
-                        paste0(datadir, ., '.csv') %>%
-                        write.csv(TSN, file=., quote=F, row.names = F)
+
                         
-                        ## stock code, day index in MATLAB 
-                        MATdex <- cbind("Stkcd"=rep(1:length(TSN), each=bhdate-exdate+1),
-                                        "day"=rep(seq(from=1, to=bhdate-exdate+1, by=1), times=length(TSN))) 
-                        paste(subAccprd, P, weekterm, 'est', 'MATdex', sep='_') %>%
-                        paste0(datadir, ., '.csv') %>%
-                        write.csv(MATdex, file=., quote=F, row.names = F)
+                        ## Outout the stock symbols and day index to be used in MATLAB 
+                        MATdex <- cbind("Stkcd"=rep(1:length(TSN), 
+                                                    each=bhdate-exdate+1+bhdate.bh-exdate.bh+1),
+                                        "day"=rep(seq(from=1, 
+                                                      to=bhdate-exdate+1+bhdate.bh-exdate.bh+1, by=1), 
+                                                  times=length(TSN)))
+                        
+                            paste(subAccprd, P, M,weekterm, 'est', 'MATdex', sep='_') %>%
+                            paste0(datadir, ., '.csv') %>%
+                            write.csv(MATdex, file=., quote=F, row.names = F)
                     
                     
-                    } else {
-                        exdate <- 251 # Event Window
-                        bhdate <- 311
+                    } else {  ## Output the data of event window: 81 days
+                      
+                        exdate <- 91 
+                        bhdate <- 171
                         
                         stkeve <- data.frame()
                         for (i in unique(stkdat$Stkcd)) {
@@ -359,13 +386,11 @@ for (A in 1:length(Accprd)) {
                             stkeve <- rbind(stkeve, stksim)
                         }
                         rm(stksim)
-                  
-                  
-                        ## Output the event window data =======================================
                         
-                        paste(subAccprd, P, weekterm, 'eve', 'TradStat', sep='_') %>%
-                        paste0(datadir, ., '.csv') %>%
-                        write.csv(stkeve, file=., quote=F, row.names = F)
+                        
+                            paste(subAccprd, P, M, weekterm, 'eve', 'TradStat', sep='_') %>%
+                            paste0(datadir, ., '.csv') %>%
+                            write.csv(stkeve, file=., quote=F, row.names = F)
                         
                     }
                 }
@@ -373,4 +398,3 @@ for (A in 1:length(Accprd)) {
         }
     }
 }
-

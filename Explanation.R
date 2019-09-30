@@ -4,18 +4,36 @@ library(lubridate)
 # Specifying trem information
 Accprd <- as.Date('2017-09-30')
 Pretype <- '6'
+Markettype <- '5'
 weekterm <- 'wekbind'
 modeltype <- 'FF3'
 datadir <- '~/NutSync/MyData/QEAData/'
 
-stkeve <- paste('^', Accprd, '.', Pretype, '.', weekterm, 
-                '.*?', 'eve_TradStat[.]csv$', sep='') %>% 
+
+# Input trading data with FF factors from event window
+stkeve <- paste(Accprd, Pretype, Markettype, weekterm, sep='_') %>% 
+    paste0('.*?eve_TradStat[.]csv$') %>% 
     dir(datadir, pattern = .) %>% 
     paste0(datadir, .) %>% 
     read_delim(delim=',', na = '')
 
-Stkcd_sub <- unique(stkeve$Stkcd)
 
+T <- 81L
+N <- nrow(stkeve)/T
+Quittime <- 20L # we abandon somes event window for the beauty of data visualization
+timeline <- c(-20:+40) # just the order of tau, 
+# the number of day that before or after the earnings announcement day
+
+minsrow <- c()
+for (i in 1:N) {
+    subrow <- seq(1, Quittime) + (i-1)*T
+    minsrow <- c(minsrow, subrow)
+}
+stkeve <- stkeve[-minsrow,]
+Stkcd_sub <- unique(stkeve$Stkcd) # symbols of selected stocks
+rm(subrow, minsrow)
+
+# Input the aggregate trading data form CSMAR
 
 TRD_Dalyr <- read_delim("~/NutSync/MyData/QEAData/TRD_Dalyr.txt", "\t", 
                         escape_double = FALSE, trim_ws = TRUE,
@@ -37,6 +55,8 @@ TRD_Dalyr_sub <- TRD_Dalyr[-c(1,2), ] %>%
              subset(TradingDate %within% interval(Accprd %m+% months(-6), Accprd %m+% months(+6)))
 
 
+# calculate the amplitude of stocks on trading day
+
 TRD_sam <- data.frame()    
 for (i in Stkcd_sub) {
     TRD_sim <- TRD_Dalyr_sub %>% as_tibble() %>%
@@ -47,6 +67,7 @@ for (i in Stkcd_sub) {
 TRD_Dalyr_sub <- TRD_sam; rm(TRD_sam, TRD_sim)
 
 
+# Input the transaction derivative index
 
 STK_MKT_Dalyr <- read_delim("~/NutSync/MyData/QEAData/STK_MKT_Dalyr.txt", 
                             "\t", escape_double = FALSE, trim_ws = TRUE,
@@ -66,14 +87,15 @@ STK_MKT_Dalyr_sub <- STK_MKT_Dalyr[-c(1,2), ] %>%
     subset(TradingDate %within% interval(Accprd %m+% months(-6), Accprd %m+% months(+6)))
 
 
+# merge above three parts of data
+TRD_reg <- merge(stkeve, TRD_Dalyr_sub, by = c("Stkcd", "TradingDate")) %>% 
+            merge(STK_MKT_Dalyr_sub, by = c("Stkcd", "TradingDate"))
 
-TRD_reg <- merge(stkeve, TRD_Dalyr_sub, by = c("Stkcd", "TradingDate"))
-TRD_reg <- merge(TRD_reg, STK_MKT_Dalyr_sub, by = c("Stkcd", "TradingDate"))
 
 
-
-ARcd <- paste('^', Accprd, '.', Pretype, '.', modeltype, '.', weekterm, 
-                '.', 'group', '.*?', 'AR[.]csv$', sep='') %>% 
+# bind colums of abnormal returns and group information with above trading status (TRD_reg)
+ARcd <- paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', sep='_') %>% 
+        paste0('.*?AR[.]csv$') %>% 
         dir(datadir, pattern = .) %>% 
         paste0(datadir, .)
 
@@ -97,9 +119,35 @@ for (i in 1:length(ARcd)) {
    assign(paste0('TRD', '_reg', '_g', i), TRD_lm)
 }
 
-TRD_reg <- mget(ls(pattern = '^TRD_reg_g'))
+TRD_reg <- mget(ls(pattern = '^TRD_reg_g[0-9]$'))
 rm(stkabrgp, TRD_reg_gp, TRD_abr,TRD_lm)
 
+
+# Standard deviation of group stock's daily returns everyday (event window)
+TRD_Dret_sd <- c()
+for (i in 1:length(ARcd)) {
+    TRD_reg_ana <- get(ls(pattern = '^TRD_reg_g[0-9]$')[i])
+    stkabr_ana <- get(ls(pattern = '^stkabr_g[0-9]$')[i])
+    TRD_Dret_sdc <- c()
+    for (z in 1:nrow(stkabr_ana)) {
+        sd_nrow <- seq(z, nrow(stkabr_ana)*(ncol(stkabr_ana)-1), nrow(stkabr_ana))
+        TRD_Dretsd <- sd(TRD_reg_ana$Dretwd[sd_nrow])
+        TRD_Dret_sdc <- c(TRD_Dret_sdc, TRD_Dretsd)
+    }
+    TRD_Dret_sd <- cbind(TRD_Dret_sd, TRD_Dret_sdc)
+}
+colnames(TRD_Dret_sd) <- ls(pattern = '^stkabr_g[0-9]$')
+rm(stkabr_ana, TRD_reg_ana, sd_nrow, TRD_Dretsd, TRD_Dret_sdc, sd_nrow)
+
+
+plot(TRD_Dret_sd[,1])
+plot(TRD_Dret_sd[,2], col='red')
+
+
+
+# Statistical properties
+summary(TRD_reg_g1$Dretwd)
+summary(TRD_reg_g2$Dretwd)
 
 
 
@@ -116,25 +164,3 @@ summary(lm(abnormalreturn ~ Turnover+amplitude+Liquidility,
            data = rbind()))
 
 
-# Statistical properties
-summary(TRD_reg_g1$Clsprc)
-summary(TRD_reg_g1$Clsprc)
-
-plot(density(TRD_reg_g1$Clsprc))
-lines(density(TRD_reg_g2$Clsprc), col='red')
-
-
-# Standard deviation by everyday (event window)
-TRD_clsprc_sd <- c()
-for (i in 1:length(ARcd)) {
-    TRD_reg_ana <- get(ls(pattern = '^TRD_reg_g')[i])
-    stkabr_ana <- get(ls(pattern = '^stkabr_g')[i])
-    TRD_clsprc <- c()
-    for (z in 1:nrow(stkabr_ana)) {
-        sd_nrow <- seq(z, nrow(stkabr_ana)*(ncol(stkabr_ana)-1), nrow(stkabr_ana))
-        TRD_clssd <- sd(TRD_reg_ana$Clsprc[sd_nrow])
-        TRD_clsprc <- c(TRD_clsprc, TRD_clssd)
-    }
-    TRD_clsprc_sd <- cbind(TRD_clsprc_sd, TRD_clsprc)
-}
-colnames(TRD_clsprc_sd) <- ls(pattern = '^stkabr_g')
