@@ -1,10 +1,11 @@
 library(tidyverse)
+library(classo)
+library(Rmosek)
 
 
+# Input data of a window ======
 
-# Input window data ===========================================================
 datadir <- '~/NutSync/MyData/QEAData/'
-
 # Specifying trem information
 Accprd <- as.Date('2017-09-30')
 Pretype <- '6'
@@ -35,27 +36,26 @@ stkeve <- paste(Accprd, Pretype, Markettype, weekterm, sep='_') %>%
 
 T <- 81L
 N <- nrow(stkeve)/T
-Quittime <- 20L # we abandon somes event window for data visualization beauty
-timeline <- c(-20:+40) # just the order of tau
+# we abandon part of event window for data visualization beauty
+abdtau <- sapply(1:N, function(x) {seq(1, 20) + (x-1)*T}, simplify = TRUE) %>% as.vector()
+stkeve <- stkeve[-abdtau,]
+timeline <- c(-20:+40) 
 
-minsrow <- c()
-for (i in 1:N) {
-    subrow <- seq(1, Quittime) + (i-1)*T
-    minsrow <- c(minsrow, subrow)
-}
-stkeve <- stkeve[-minsrow,]
-rm(subrow, minsrow)
+# Assure the PLS(su, 2016) estimator
+tt <- 240L
+x <- as.matrix(subset(stkest, select=c(mkt_rf, smb, hml)))
+y <- as.matrix(subset(stkest, select=c(Dret_rf)))
+lambda <- as.numeric( 0.5565 * var(y) / (tt^(1/3)) )
+pls_out <- PLS.cvxr(N, tt, y, x, K = 3, lambda = lambda)
 
 
-
-
-## Read the result from MATLAB ==================================================
+## Read the result from MATLAB ========
 library(R.matlab)
 PLSpath <- "~/NutSync/QEA/Matlab_PLS"
 
 # Group information
 PLSclus <- readMat(file.path(PLSpath, 
-                             paste('group', Accprd, Pretype, Markettype, weekterm, 'all', sep = '_') %>% 
+                             paste('group', Accprd, Pretype, Markettype, weekterm, 'CUFE', 'SMB', 'HML', '3', sep = '_') %>% 
                                paste0('.mat'))) %>% `[[`(1) 
 colnames(PLSclus) <- c("group")
 grpnum <- length(unique(PLSclus))
@@ -76,7 +76,7 @@ PLSgrp$Stkcd <- as.character(PLSgrp$Stkcd)
 
 # PLS coefficients
 PLScoef <- readMat(file.path(PLSpath, 
-                             paste('est_PLS',Accprd, Pretype, Markettype, weekterm, 'all', sep = '_') %>% 
+                             paste('est_PLS',Accprd, Pretype, Markettype, weekterm, 'CUFE', 'SMB', 'HML', '3',sep = '_') %>% 
                                paste0('.mat'))) %>% `[[`(1)
 PLScolnam <- c()
 for (i in 1:grpnum) {
@@ -89,7 +89,7 @@ colnames(PLScoef) <- PLScolnam; rm(colnam)
 ## decide Asset pricing model, CAPM, FF 3-factors or FF 5-factors? =================
 
 if (nrow(PLScoef)==3) { # 3 factors
-    stkff <- subset(stkest, select=c(Stkcd, Dretwd, RiskPrem, Thr_SMB, Thr_HML))
+    stkff <- subset(stkest, select=c(Stkcd, Dret_rf, mkt_rf, smb, hml))
     modeltype <- 'FF3'
 } else if (nrow(PLScoef)==5) {
     stkff <- subset(stkest, select=c(Stkcd, Dretwd, RiskPrem, Five_SMB, Five_HML,
@@ -101,26 +101,26 @@ if (nrow(PLScoef)==3) { # 3 factors
 }
 
 
-paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'PLScoef', 'all', sep='_') %>%
+paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'PLScoef', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
   paste0(datadir, ., '.csv') %>% 
 write.csv(round(PLScoef,4), file=., quote=F, row.names = F)
 
 
-paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', 'all', sep='_') %>%
+paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
          paste0(datadir, ., '.csv') %>% 
-write.csv(PLSgrp,4, file=., quote=F, row.names = F)
+write.csv(PLSgrp, file=., quote=F, row.names = F)
 
 
 
 
 # Obtain the OLS estimate parameters ===============================================
 
-windlen <- 180L # The length of estimation window
+windlen <- 240L # The length of estimation window
 
 
 # the correlation coefficient between explanation variables
 rownum <- windlen * sample(1:length(unique(stkff$Stkcd)), size = 1)
-cor(subset(stkff[c(1:windlen)+rownum,], select = -c(Stkcd, Dretwd))); rm(rownum)
+cor(subset(stkff[c(1:windlen)+rownum,], select = -c(Stkcd, Dret_rf))); rm(rownum)
 
 
 ## personal function for getting the OLS estimator one by one
@@ -128,7 +128,7 @@ stkcoef <- function(x) {
     g <- data.frame()
     for(i in unique(x$Stkcd)) {
         q <- filter(x, Stkcd==i)[,-1]
-        stkreg <- lm(Dretwd ~ ., data = q)
+        stkreg <- lm(Dret_rf ~ ., data = q)
         stkregcoef <- round(t(as.data.frame(coef(stkreg))), 6)
         k <- cbind('Stkcd' = i, stkregcoef)
         g <- rbind(g,k)
@@ -142,7 +142,7 @@ OLScoef <- stkcoef(stkff)
 if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
     colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML")
     coefcol <- c("MKT", "SMB", "HML")
-    evencol <- c("RiskPrem", "Thr_SMB", "Thr_HML")
+    evencol <- c("mkt_rf", "smb", "hml")
 } else if (ncol(OLScoef)==7) {
     colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML", "RMW", "CMA")
     coefcol <- c("MKT", "SMB", "HML", "RMW", "CMA")
@@ -156,7 +156,7 @@ if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
 
 # solve the problem of data type (factor to numeric)
 # and please assure the OLS estimator in R is same with the MATLAB's
-cdcoef <- paste(Accprd, Pretype, Markettype, weekterm, modeltype,'OLScoef', 'all', sep='_') %>%
+cdcoef <- paste(Accprd, Pretype, Markettype, weekterm, modeltype,'OLScoef', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
           paste0(datadir, ., '.csv')
 write.csv(OLScoef, file=cdcoef, quote=F, row.names = F)
 OLScoef <- as.data.frame(read_delim(cdcoef, delim=',', na = '')); rm(cdcoef)
@@ -178,7 +178,7 @@ for (z in 1:grpnum) {
         evedat <- filter(stkeve, Stkcd==i)
         w <- as.matrix(evedat[, evencol]) %*% diag(subset(OLScoef, Stkcd==i, select = coefcol))
         stkfit <- rowSums(w)
-        AbRet <- subset(evedat, select = Dretwd) - stkfit
+        AbRet <- subset(evedat, select = Dret_rf) - stkfit
         stkabr <- cbind(stkabr, AbRet)
     }
     colnames(stkabr) <- c('tau', subsam)
@@ -191,11 +191,11 @@ rm(subsam, evedat, w, stkfit, AbRet, stkabr)
 # Output the abnormal returns
 for (i in 1:grpnum) {
     if (i == 1) {
-        paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR', 'all',sep='_') %>%
+        paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR',sep='_') %>%
             paste0(datadir, ., '.csv') %>%
             write.csv(QEAabr[,c(1:(samnum[i]+1))], file=., quote=F, row.names = F)
     } else {
-        paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR', 'all',sep='_') %>%
+        paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR',sep='_') %>%
             paste0(datadir, ., '.csv') %>%
             write.csv(QEAabr[,c((i+sum(samnum[1:(i-1)])) : (i+sum(samnum[1:i])))], 
                       file=., quote=F, row.names = F)
@@ -228,7 +228,7 @@ QEAcar <- mutate(QEAcar, 'unclassified'=rowMeans(QEAabr[ , - minstau]))
 rm(minstau)
 
     # Output 
-    paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'all', sep='_') %>%
+    paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
     paste0(datadir, ., '.csv') %>%
     write.csv(QEAcar, file=., quote=F, row.names = F)
 
@@ -251,7 +251,7 @@ ggcar$group <- as.factor(ggcar$group)
 
 library(ggplot2)
 
-pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'all', sep='_') %>%
+pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
     paste0(datadir, ., '.pdf'))
 
 if (grpnum+1==4) {
@@ -289,7 +289,7 @@ dev.off()
 require(grid)
 library(latex2exp)
 
-pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'OLScoefdis', 'all', sep='_') %>%
+pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'OLScoefdis', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
     paste0(datadir, ., '.pdf'))
 
 grid.newpage()
