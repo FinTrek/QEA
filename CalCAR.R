@@ -5,32 +5,32 @@ library(Rmosek)
 
 # Input data of a window ======
 
-datadir <- '~/NutSync/MyData/QEAData/'
+datdir <- '~/NutSync/MyData/QEAData/CH3/'
 # Specifying trem information
 Accprd <- as.Date('2017-09-30')
 Pretype <- '6'
-Markettype <- '5'
+Markettype <- '21'
 weekterm <- 'wekbind'
 
 
 Stkcd <- paste(Accprd, Pretype, Markettype, weekterm, sep='_') %>% 
     paste0('.*?est_stkcd[.]csv$') %>% 
-    dir(datadir, pattern = .) %>% 
-    paste0(datadir, .) %>% 
+    dir(datdir, pattern = .) %>% 
+    paste0(datdir, .) %>% 
     read_delim(delim=',', na = '')
 
 
 stkest <- paste(Accprd, Pretype, Markettype, weekterm, sep='_') %>% 
     paste0('.*?est_TradStat[.]csv$') %>% 
-    dir(datadir, pattern = .) %>% 
-    paste0(datadir, .) %>% 
+    dir(datdir, pattern = .) %>% 
+    paste0(datdir, .) %>% 
     read_delim(delim=',', na = '')
 
 
 stkeve <- paste(Accprd, Pretype, Markettype, weekterm, sep='_') %>% 
     paste0('.*?eve_TradStat[.]csv$') %>% 
-    dir(datadir, pattern = .) %>% 
-    paste0(datadir, .) %>% 
+    dir(datdir, pattern = .) %>% 
+    paste0(datdir, .) %>% 
     read_delim(delim=',', na = '') 
 
 
@@ -42,11 +42,11 @@ stkeve <- stkeve[-abdtau,]
 timeline <- c(-20:+40) 
 
 # Assure the PLS(su, 2016) estimator
-tt <- 240L
-x <- as.matrix(subset(stkest, select=c(mkt_rf, smb, hml)))
-y <- as.matrix(subset(stkest, select=c(Dret_rf)))
-lambda <- as.numeric( 0.5565 * var(y) / (tt^(1/3)) )
-pls_out <- PLS.cvxr(N, tt, y, x, K = 3, lambda = lambda)
+# tt <- 240L
+# x <- as.matrix(subset(stkest, select=c(mkt_rf, smb, hml)))
+# y <- as.matrix(subset(stkest, select=c(Dret_rf)))
+# lambda <- as.numeric( 0.5565 * var(y) / (tt^(1/3)) )
+# pls_out <- PLS.cvxr(N, tt, y, x, K = 3, lambda = lambda)
 
 
 ## Read the result from MATLAB ========
@@ -54,9 +54,9 @@ library(R.matlab)
 PLSpath <- "~/NutSync/QEA/Matlab_PLS"
 
 # Group information
-PLSclus <- readMat(file.path(PLSpath, 
-                             paste('group', Accprd, Pretype, Markettype, weekterm, 'CUFE', 'SMB', 'HML', '3', sep = '_') %>% 
-                               paste0('.mat'))) %>% `[[`(1) 
+PLSclus <- readMat(file.path(PLSpath, paste('group', Accprd, Pretype, Markettype, weekterm, 
+                                            'CH3', 'SMB', 'VMG', '3', sep = '_') %>% 
+                                      paste0('.mat'))) %>% `[[`(1) 
 colnames(PLSclus) <- c("group")
 grpnum <- length(unique(PLSclus))
 # grouped stock code
@@ -75,9 +75,9 @@ PLSgrp$Stkcd <- as.character(PLSgrp$Stkcd)
 
 
 # PLS coefficients
-PLScoef <- readMat(file.path(PLSpath, 
-                             paste('est_PLS',Accprd, Pretype, Markettype, weekterm, 'CUFE', 'SMB', 'HML', '3',sep = '_') %>% 
-                               paste0('.mat'))) %>% `[[`(1)
+PLScoef <- readMat(file.path(PLSpath, paste('est_PLS',Accprd, Pretype, Markettype, weekterm, 
+                                            'CH3', 'SMB', 'VMG', '3',sep = '_') %>% 
+                                      paste0('.mat'))) %>% `[[`(1)
 PLScolnam <- c()
 for (i in 1:grpnum) {
     colnam <- paste0('g', i, '_', c('coef', 'sd', 't'))
@@ -89,25 +89,27 @@ colnames(PLScoef) <- PLScolnam; rm(colnam)
 ## decide Asset pricing model, CAPM, FF 3-factors or FF 5-factors? =================
 
 if (nrow(PLScoef)==3) { # 3 factors
-    stkff <- subset(stkest, select=c(Stkcd, Dret_rf, mkt_rf, smb, hml))
+    stkff <- subset(stkest, select=c(Stkcd, Dret_rf, mkt_rf, SMB, VMG))
     modeltype <- 'FF3'
 } else if (nrow(PLScoef)==5) {
-    stkff <- subset(stkest, select=c(Stkcd, Dretwd, RiskPrem, Five_SMB, Five_HML,
+    stkff <- subset(stkest, select=c(Stkcd, Dret_rf, mkt_rf, Five_SMB, Five_HML,
                                      Five_RMW, Five_CMA))
     modeltype <- 'FF5'
 } else {
-    stkff <- subset(stkest, select=c(Stkcd, Dretwd, RiskPrem))
+    stkff <- subset(stkest, select=c(Stkcd, Dret_rf, mkt_rf))
     modeltype <- 'CAPM'
 }
 
 
-paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'PLScoef', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
-  paste0(datadir, ., '.csv') %>% 
+paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+      'PLScoef', 'CH3', 'SMB', 'VMG', '3',sep='_') %>%
+  paste0(datdir, ., '.csv') %>% 
 write.csv(round(PLScoef,4), file=., quote=F, row.names = F)
 
 
-paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
-         paste0(datadir, ., '.csv') %>% 
+paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+      'group', 'CH3', 'SMB', 'VMG', '3', sep='_') %>%
+         paste0(datdir, ., '.csv') %>% 
 write.csv(PLSgrp, file=., quote=F, row.names = F)
 
 
@@ -140,11 +142,11 @@ OLScoef <- stkcoef(stkff)
 
 # Set colunm names and data extraction strings
 if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
-    colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML")
-    coefcol <- c("MKT", "SMB", "HML")
-    evencol <- c("mkt_rf", "smb", "hml")
+    colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "VMG")
+    coefcol <- c("MKT", "SMB", "VMG")
+    evencol <- c("mkt_rf", "SMB", "VMG")
 } else if (ncol(OLScoef)==7) {
-    colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "HML", "RMW", "CMA")
+    colnames(OLScoef) <- c("Stkcd", "alpha","MKT", "SMB", "VMG", "RMW", "CMA")
     coefcol <- c("MKT", "SMB", "HML", "RMW", "CMA")
     evencol <- c("RiskPrem", "Five_SMB", "Five_HML", "Five_RMW", "Five_CMA")
 } else {
@@ -156,8 +158,9 @@ if (ncol(OLScoef)==5) { # 5= 2(Stkcd+alpha) + 3 factors
 
 # solve the problem of data type (factor to numeric)
 # and please assure the OLS estimator in R is same with the MATLAB's
-cdcoef <- paste(Accprd, Pretype, Markettype, weekterm, modeltype,'OLScoef', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
-          paste0(datadir, ., '.csv')
+cdcoef <- paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+                'OLScoef', 'CH3', 'SMB', 'VMG', '3',sep='_') %>%
+          paste0(datdir, ., '.csv')
 write.csv(OLScoef, file=cdcoef, quote=F, row.names = F)
 OLScoef <- as.data.frame(read_delim(cdcoef, delim=',', na = '')); rm(cdcoef)
 OLScoef[, 3:ncol(OLScoef)] <- round(OLScoef[, 3:ncol(OLScoef)], 6)
@@ -192,11 +195,11 @@ rm(subsam, evedat, w, stkfit, AbRet, stkabr)
 for (i in 1:grpnum) {
     if (i == 1) {
         paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR',sep='_') %>%
-            paste0(datadir, ., '.csv') %>%
+            paste0(datdir, ., '.csv') %>%
             write.csv(QEAabr[,c(1:(samnum[i]+1))], file=., quote=F, row.names = F)
     } else {
         paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'group', i, 'AR',sep='_') %>%
-            paste0(datadir, ., '.csv') %>%
+            paste0(datdir, ., '.csv') %>%
             write.csv(QEAabr[,c((i+sum(samnum[1:(i-1)])) : (i+sum(samnum[1:i])))], 
                       file=., quote=F, row.names = F)
     }
@@ -228,8 +231,9 @@ QEAcar <- mutate(QEAcar, 'unclassified'=rowMeans(QEAabr[ , - minstau]))
 rm(minstau)
 
     # Output 
-    paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'CUFE', 'SMB', 'HML', '3',sep='_') %>%
-    paste0(datadir, ., '.csv') %>%
+    paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+          'CAR', 'CH3', 'SMB', 'VMG', '3',sep='_') %>%
+    paste0(datdir, ., '.csv') %>%
     write.csv(QEAcar, file=., quote=F, row.names = F)
 
 
@@ -251,8 +255,9 @@ ggcar$group <- as.factor(ggcar$group)
 
 library(ggplot2)
 
-pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'CAR', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
-    paste0(datadir, ., '.pdf'))
+pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+          'CAR', 'CH3', 'SMB', 'VMG', '3', sep='_') %>%
+    paste0(datdir, ., '.pdf'))
 
 if (grpnum+1==4) {
   ggplot(ggcar, aes(timeline, CAR, 
@@ -289,8 +294,9 @@ dev.off()
 require(grid)
 library(latex2exp)
 
-pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 'OLScoefdis', 'CUFE', 'SMB', 'HML', '3', sep='_') %>%
-    paste0(datadir, ., '.pdf'))
+pdf(paste(Accprd, Pretype, Markettype, weekterm, modeltype, 
+          'OLScoefdis', 'CH3', 'SMB', 'VMG', '3', sep='_') %>%
+    paste0(datdir, ., '.pdf'))
 
 grid.newpage()
 vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)}
@@ -300,7 +306,7 @@ if(ncol(OLScoef)==5) {
                     ylab = "Count",bins=100), vp = vplayout(1,1:2))
         print(qplot(OLScoef$SMB, xlab=TeX('$\\beta_2$ of SMB'),
                     ylab = "Count",bins=50), vp = vplayout(2,1))       
-        print(qplot(OLScoef$HML, xlab=TeX('$\\beta_3$ of HML'),
+        print(qplot(OLScoef$VMG, xlab=TeX('$\\beta_3$ of HML'),
                     ylab = "Count",bins=50), vp = vplayout(2,2))}
 } else if (ncol(OLScoef)==7) {
     {pushViewport(viewport(layout = grid.layout(2,4)))

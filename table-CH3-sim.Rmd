@@ -88,7 +88,7 @@ for (i in 1:length(potfolreg.est)) {
         # add size quintile for distinguish size portfolios
         cbind(c('Samll', as.character(2:4), 'Big'), .) %>%
             kable(caption = capt, booktabs = T, escape = F, linesep = "") %>%
-                add_header_above(c("size quintile" = 1,
+                add_header_above(c("Size quintile" = 1,
                                  "Low" = 1, "2" = 1, "3" = 1, "4" = 1, "High" = 1,
                                  "Low" = 1, "2" = 1, "3" = 1, "4" = 1, "High" = 1)) %>%
                 add_header_above(c(" " = 1,

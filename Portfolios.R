@@ -151,8 +151,8 @@ save.image(paste0(datdir, 'PrePotfolReg', '.RData'))
 
 # set the quarter terms
 # notice that we need to set one quarter ahead
-Accprd <- months(seq(0, by=3, length=10)) %>% 
-    mapply('%m+%', ymd('2015-12-31'), .) %>% 
+Accprd <- months(seq(0, by=3, length=24)) %>% 
+    mapply('%m+%', ymd('2012-12-31'), .) %>% 
     as.Date(origin='1970-01-01') 
 
 # setup the saving list of results
@@ -226,7 +226,8 @@ for(q in 1:length(Accprd)) {
             # quarter financial report within our sample
             merge(RepInf, by='Stkcd') %>%  
             mutate(Size = Clsprc * CmnEqty, # SMB
-                   Value = Erana / Clsprc) # VMG
+                   Value = Erana / Clsprc) %>%  # VMG
+            `[`(complete.cases(.$Size & .$Value),)
     } 
     
     

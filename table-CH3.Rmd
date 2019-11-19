@@ -1,7 +1,7 @@
 ---
-title: "Regression Results of CH-3(Liu, 2018) in China A-share Markets"
-author: "Hongyu Hu"
-date: "11/07/2019"
+# title: "Regression Results of CH-3 (Liu, 2018) in Chinese A-share Markets"
+# author: "Hongyu Hu"
+# date: "11/12/2019"
 header-includes:
   - \usepackage{booktabs}
   - \usepackage{longtable}
@@ -59,6 +59,8 @@ for (i in 1:length(Accprd)) {
   Accprd.char[i] <- paste(Accprd[i] + days(1), ' to ', Accprd[i] %m+% months(3))
 }
 
+packrow <- rep(5, length=length(Accprd.char)) %>% `names<-`(Accprd.char)
+
 
     varname <- c('(Intercept)', 'MKT', 'SMB', 'VMG') # for solve question about underline
     for(l in 1:length(varname)){
@@ -99,28 +101,17 @@ for (i in 1:length(Accprd)) {
         cbind(estmat, estmatt) %>%  # statistics
         round(digits=3) %>% format(nsmall=3) %>%
         # add size quintile for distinguish size portfolios
-        cbind(c('Samll', as.character(2:4), 'Big'), .) %>% `colnames<-`(NULL) %>%
-            kable(caption = capt, booktabs = T, escape = F, longtable = T) %>%
-                add_header_above(c("size quintile" = 1,
-                                 "Low" = 1, "2" = 1, "3" = 1, "4" = 1, "High" = 1,
-                                 "Low" = 1, "2" = 1, "3" = 1, "4" = 1, "High" = 1)) %>%
+        cbind(c('Samll', as.character(2:4), 'Big'), .) %>% 
+          `colnames<-`(c("Size quintile", rep(c("Low", "2", "3", "4", "High"),2))) %>%
+            kable(caption = capt, booktabs = T, escape = F, longtable = T,  align=rep('r', 10)) %>%
                 add_header_above(c(" " = 1,
                                    "Estimate" = 5, "t value" = 5)) %>%
                 add_header_above(c(" " = 1,
                                    "Earnings-to-price (EP) quintiles" = 10), italic = T) %>%
-                    kable_styling(latex_options = c("hold_position", "repeat_header", "scale_down"),
+                    kable_styling(latex_options = c("hold_position", "repeat_header"),
                                   full_width = F) %>% 
-                    pack_rows(index=c( "2016-01-01  to  2016-03-31" =5, 
-                                       "2016-04-01  to  2016-06-30" =5,
-                                       "2016-07-01  to  2016-09-30" =5,
-                                       "2016-10-01  to  2016-12-30" =5,
-                                       "2017-01-01  to  2017-03-31" =5,
-                                       "2017-04-01  to  2017-06-30" =5,
-                                       "2017-07-01  to  2017-09-30" =5,
-                                       "2017-10-01  to  2017-12-30" =5,
-                                       "2018-01-01  to  2018-03-31" =5,
-                                       "2018-04-01  to  2018-06-30" =5),
-                               latex_gap_space = "2em") %>% 
+                    pack_rows(index=packrow,
+                               latex_gap_space = "1.5em") %>% 
                     footnote(alphabet = c("$R_t$ is the value-weighted percent
                                           daily return on all the stocks in the 25 size-EP portfolios.
                                           $R_f$ is the daily one-year deposit interest rate
